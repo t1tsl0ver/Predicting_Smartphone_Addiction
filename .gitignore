@@ -221,6 +221,7 @@ __marimo__/
 .idea/
 artifacts/
 submission.csv
+submission.metadata.json
 *.cbm
 *.joblib
 

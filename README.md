@@ -16,6 +16,11 @@
 Локальная оценка получена на фиксированном стратифицированном holdout: 20% train,
 `random_state=42`. Результат Kaggle сообщён участником после загрузки submission.
 
+Текущий кандидат после `trial-007`: 3-fold CV rank ensemble из 15% CatBoost
+d8/1000 и 85% LightGBM. Его OOF ROC AUC — `0.963154`; новый Kaggle score ещё не
+получен. Актуальная история маленьких проверок находится в
+[`notes/TRIALS.md`](notes/TRIALS.md).
+
 ## Структура репозитория
 
 ```text
