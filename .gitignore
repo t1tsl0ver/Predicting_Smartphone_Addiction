@@ -216,3 +216,16 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Project-local files
+.idea/
+artifacts/
+submission.csv
+*.cbm
+*.joblib
+
+# Kaggle datasets are downloaded locally and are not stored in Git.
+data/*.csv
+train*.csv
+test*.csv
+sample_submission*.csv
