@@ -41,6 +41,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--validation-size", type=float, default=0.20)
     parser.add_argument("--iterations", type=int, default=400)
+    parser.add_argument("--depth", type=int, default=7)
     parser.add_argument("--early-stopping-rounds", type=int, default=60)
     parser.add_argument("--output-dir", type=Path, default=Path("artifacts"))
     parser.add_argument(
@@ -108,10 +109,12 @@ def prepare_catboost_categories(
     return train_features, test_features
 
 
-def make_catboost(iterations: int, verbose: int | bool) -> CatBoostClassifier:
+def make_catboost(
+    iterations: int, depth: int, verbose: int | bool
+) -> CatBoostClassifier:
     return CatBoostClassifier(
         iterations=iterations,
-        depth=7,
+        depth=depth,
         learning_rate=0.08,
         loss_function="Logloss",
         eval_metric="AUC",
@@ -136,7 +139,7 @@ def validate_catboost(
         random_state=RANDOM_SEED,
         stratify=target,
     )
-    model = make_catboost(args.iterations, verbose=100)
+    model = make_catboost(args.iterations, args.depth, verbose=100)
     model.fit(
         x_train,
         y_train,
@@ -252,6 +255,8 @@ def main() -> None:
         metrics["run_id"] = args.run_id
 
     if args.model == "catboost":
+        metrics["requested_iterations"] = args.iterations
+        metrics["depth"] = args.depth
         x, x_test = prepare_catboost_categories(x, x_test, categorical)
         if args.final_only:
             best_iterations = args.iterations
@@ -297,7 +302,7 @@ def main() -> None:
 
         if not args.skip_final:
             print("\nTraining final model on all training rows...")
-            final_model = make_catboost(best_iterations, verbose=100)
+            final_model = make_catboost(best_iterations, args.depth, verbose=100)
             final_model.fit(x, y, cat_features=categorical)
             final_model.save_model(args.output_dir / "catboost_model.cbm")
             test_probabilities = final_model.predict_proba(x_test)[:, 1]
