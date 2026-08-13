@@ -51,6 +51,11 @@ def parse_args() -> argparse.Namespace:
         help="Optional safe label used in metric and diagnostic filenames.",
     )
     parser.add_argument(
+        "--save-validation-predictions",
+        action="store_true",
+        help="Save validation row indices, targets and probabilities.",
+    )
+    parser.add_argument(
         "--skip-final",
         action="store_true",
         help="Only calculate validation AUC; do not train on all rows.",
@@ -131,7 +136,7 @@ def validate_catboost(
     target: pd.Series,
     categorical: list[str],
     args: argparse.Namespace,
-) -> tuple[float, int, CatBoostClassifier]:
+) -> tuple[float, int, CatBoostClassifier, pd.DataFrame]:
     x_train, x_valid, y_train, y_valid = train_test_split(
         train_features,
         target,
@@ -151,7 +156,14 @@ def validate_catboost(
     probabilities = model.predict_proba(x_valid)[:, 1]
     auc = roc_auc_score(y_valid, probabilities)
     best_iteration = model.get_best_iteration() + 1
-    return auc, best_iteration, model
+    validation_predictions = pd.DataFrame(
+        {
+            "row_index": x_valid.index,
+            "target": y_valid.to_numpy(),
+            "prediction": probabilities,
+        }
+    ).sort_values("row_index")
+    return auc, best_iteration, model, validation_predictions
 
 
 def make_logistic(
@@ -262,7 +274,7 @@ def main() -> None:
             best_iterations = args.iterations
             metrics["best_iterations"] = best_iterations
         else:
-            auc, best_iterations, validation_model = validate_catboost(
+            auc, best_iterations, validation_model, validation_predictions = validate_catboost(
                 x, y, categorical, args
             )
             metrics["validation_auc"] = auc
@@ -297,6 +309,12 @@ def main() -> None:
                     }
                 ).to_csv(
                     args.output_dir / f"learning_curve{diagnostic_suffix}.csv",
+                    index=False,
+                )
+            if args.save_validation_predictions:
+                validation_predictions.to_csv(
+                    args.output_dir
+                    / f"validation_predictions{diagnostic_suffix}_catboost.csv",
                     index=False,
                 )
 
