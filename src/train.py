@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 from pathlib import Path
 
 import joblib
@@ -42,6 +43,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--iterations", type=int, default=400)
     parser.add_argument("--early-stopping-rounds", type=int, default=60)
     parser.add_argument("--output-dir", type=Path, default=Path("artifacts"))
+    parser.add_argument(
+        "--run-id",
+        type=str,
+        default=None,
+        help="Optional safe label used in metric and diagnostic filenames.",
+    )
     parser.add_argument(
         "--skip-final",
         action="store_true",
@@ -214,6 +221,10 @@ def main() -> None:
     args = parse_args()
     if args.skip_final and args.final_only:
         raise ValueError("--skip-final and --final-only cannot be used together")
+    if args.run_id and not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", args.run_id):
+        raise ValueError(
+            "--run-id may contain only letters, digits, dots, underscores and hyphens"
+        )
     args.output_dir.mkdir(parents=True, exist_ok=True)
 
     print("Loading data...")
@@ -237,6 +248,8 @@ def main() -> None:
         "seed": RANDOM_SEED,
         "validation_size": args.validation_size,
     }
+    if args.run_id:
+        metrics["run_id"] = args.run_id
 
     if args.model == "catboost":
         x, x_test = prepare_catboost_categories(x, x_test, categorical)
@@ -258,9 +271,29 @@ def main() -> None:
                     "importance": validation_model.get_feature_importance(),
                 }
             ).sort_values("importance", ascending=False)
-            importances.to_csv(args.output_dir / "feature_importance.csv", index=False)
+            diagnostic_suffix = f"_{args.run_id}" if args.run_id else ""
+            importances.to_csv(
+                args.output_dir / f"feature_importance{diagnostic_suffix}.csv",
+                index=False,
+            )
             print("\nFeature importance:")
             print(importances.to_string(index=False))
+
+            validation_auc = (
+                validation_model.get_evals_result()
+                .get("validation", {})
+                .get("AUC")
+            )
+            if validation_auc:
+                pd.DataFrame(
+                    {
+                        "iteration": range(1, len(validation_auc) + 1),
+                        "validation_auc": validation_auc,
+                    }
+                ).to_csv(
+                    args.output_dir / f"learning_curve{diagnostic_suffix}.csv",
+                    index=False,
+                )
 
         if not args.skip_final:
             print("\nTraining final model on all training rows...")
@@ -283,8 +316,13 @@ def main() -> None:
             joblib.dump(final_model, args.output_dir / "logistic_model.joblib")
             test_probabilities = final_model.predict_proba(x_test)[:, 1]
 
-    metrics_suffix = "_final" if args.final_only else ""
-    metrics_path = args.output_dir / f"metrics_{args.model}{metrics_suffix}.json"
+    metrics_parts = ["metrics"]
+    if args.run_id:
+        metrics_parts.append(args.run_id)
+    metrics_parts.append(args.model)
+    if args.final_only:
+        metrics_parts.append("final")
+    metrics_path = args.output_dir / f"{'_'.join(metrics_parts)}.json"
     metrics_path.write_text(
         json.dumps(metrics, ensure_ascii=False, indent=2), encoding="utf-8"
     )
