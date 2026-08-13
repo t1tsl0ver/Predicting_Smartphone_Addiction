@@ -6,20 +6,17 @@
 
 ## Текущий результат
 
-Эксперимент [`exp-000`](notes/experiments/exp-000-catboost-baseline.md):
+Последний итоговый эксперимент —
+[`exp-001`](notes/experiments/exp-001-cv-gradient-boosting-ensemble.md):
 
-| Модель | Локальный ROC AUC | Kaggle leaderboard |
+| Версия | Локальная проверка | Kaggle leaderboard |
 |---|---:|---:|
-| Logistic Regression | 0.910275 | — |
-| CatBoost, 400 деревьев | **0.955008** | **0.95663** |
+| `exp-000`: CatBoost d7/400 | holdout 0.955008 | 0.95663 |
+| `exp-001`: 3-fold rank ensemble | **OOF 0.963154** | **0.96466** |
 
-Локальная оценка получена на фиксированном стратифицированном holdout: 20% train,
-`random_state=42`. Результат Kaggle сообщён участником после загрузки submission.
-
-Текущий кандидат после `trial-007`: 3-fold CV rank ensemble из 15% CatBoost
-d8/1000 и 85% LightGBM. Его OOF ROC AUC — `0.963154`; новый Kaggle score ещё не
-получен. Актуальная история маленьких проверок находится в
-[`notes/TRIALS.md`](notes/TRIALS.md).
+`exp-001` смешивает fold-ranks: 15% CatBoost d8/1000 и 85% LightGBM. Он улучшил
+Kaggle score относительно первого baseline на `+0.00803`. Актуальная история
+маленьких проверок находится в [`notes/TRIALS.md`](notes/TRIALS.md).
 
 ## Структура репозитория
 

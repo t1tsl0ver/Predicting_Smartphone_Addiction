@@ -8,11 +8,12 @@
 1. [`CURRENT_STATE.md`](CURRENT_STATE.md) — где мы сейчас и что делать дальше;
 2. [`DATA_DICTIONARY.md`](DATA_DICTIONARY.md) — все исходные признаки и факты о них;
 3. [`MODEL_SELECTION.md`](MODEL_SELECTION.md) — CV, подбор параметров и пороги;
-4. [`EXPERIMENT_RULES.md`](EXPERIMENT_RULES.md) — как формулировать и сравнивать эксперименты;
-5. [`TRIALS.md`](TRIALS.md) — реестр маленьких проверок;
-6. [`EXPERIMENTS.md`](EXPERIMENTS.md) — реестр итоговых версий;
-7. `trials/` — подробные карточки маленьких проверок;
-8. `experiments/` — итоговые версии из нескольких принятых улучшений.
+4. [`NEXT_DIRECTIONS.md`](NEXT_DIRECTIONS.md) — направления следующей серии;
+5. [`EXPERIMENT_RULES.md`](EXPERIMENT_RULES.md) — как формулировать и сравнивать эксперименты;
+6. [`TRIALS.md`](TRIALS.md) — реестр маленьких проверок;
+7. [`EXPERIMENTS.md`](EXPERIMENTS.md) — реестр итоговых версий;
+8. `trials/` — подробные карточки маленьких проверок;
+9. `experiments/` — итоговые версии из нескольких принятых улучшений.
 
 Заметки хранят решения и причины, а не только итоговые числа. После каждого trial
 нужно обновить его карточку и текущее состояние; после итогового exp — ещё и реестр.

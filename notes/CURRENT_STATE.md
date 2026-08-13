@@ -36,6 +36,8 @@
   у LightGBM на всех трёх folds и повысил OOF AUC на `+0.0000749`.
 - Создан CV submission из усреднённых test ranks трёх fold-моделей. SHA-256:
   `6351318d403cdf541d655217e556792d12d63ac03e1d0baa9daad513bb13ef70`.
+- Submission получил Kaggle score `0.96466`. Результат оформлен как `exp-001`.
+- Прирост leaderboard относительно `exp-000` (`0.95663`) равен `+0.00803`.
 
 ## Зафиксированное соглашение
 
@@ -60,11 +62,12 @@
 - Локальная среда: `.venv`.
 - Основной скрипт: `src/train.py`.
 - Данные: `data/train.csv`, `data/test.csv`, `data/sample_submission.csv`.
-- Фиксированный holdout: 20%, stratified, seed 42.
+- Исторический development holdout: 20%, stratified, seed 42.
+- В `exp-001`: 3-fold StratifiedKFold, shuffle, seed 2026.
 - Основная метрика: ROC AUC.
 
 ## Следующее действие
 
-Участник загружает текущий `submission.csv` на Kaggle и сообщает score. До этого
-не создавать `exp-001` и не запускать новые trial. После получения score обновить
-итоговую карточку, реестр и создать глобальный exp-коммит.
+Не запускать `trial-008` без отдельного обсуждения. Основные направления следующей
+серии: абляция слабых исходных признаков, feature engineering и проверка более
+ортогональных семейств моделей. План записан в `NEXT_DIRECTIONS.md`.

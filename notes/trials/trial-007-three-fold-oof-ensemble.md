@@ -1,6 +1,6 @@
 # trial-007 — Three-fold OOF ensemble confirmation
 
-- Статус: **accepted; submission created**
+- Статус: **accepted; Kaggle score 0.96466**
 - Дата: 2026-08-13
 - Контроль: LightGBM baseline внутри тех же CV folds
 
@@ -77,8 +77,7 @@ maximum=0.9999061768
 sha256=6351318d403cdf541d655217e556792d12d63ac03e1d0baa9daad513bb13ef70
 ```
 
-Kaggle score будет добавлен после загрузки участником. До этого `exp-001` не
-фиксируется.
+Kaggle score: `0.96466`. Submission оформлен как итоговый `exp-001`.
 
 ## Время
 
