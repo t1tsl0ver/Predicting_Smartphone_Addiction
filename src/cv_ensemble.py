@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import time
 from pathlib import Path
 
@@ -11,6 +12,13 @@ import pandas as pd
 from catboost import CatBoostClassifier
 from sklearn.metrics import roc_auc_score
 from sklearn.model_selection import StratifiedKFold
+
+from progress_logging import (
+    CatBoostProgressCallback,
+    LightGBMProgressCallback,
+    RunLogger,
+    format_duration,
+)
 
 
 TARGET = "addicted_label"
@@ -35,6 +43,18 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--catboost-iterations", type=int, default=1000)
     parser.add_argument("--catboost-depth", type=int, default=8)
     parser.add_argument("--lightgbm-iterations", type=int, default=3000)
+    parser.add_argument(
+        "--catboost-log-every",
+        type=int,
+        default=100,
+        help="Write CatBoost progress every N iterations.",
+    )
+    parser.add_argument(
+        "--lightgbm-log-every",
+        type=int,
+        default=300,
+        help="Write LightGBM progress every N iterations.",
+    )
     parser.add_argument("--output-dir", type=Path, default=Path("artifacts"))
     parser.add_argument("--run-id", type=str, default="trial-007")
     return parser.parse_args()
@@ -83,7 +103,7 @@ def make_catboost(args: argparse.Namespace, fold_seed: int) -> CatBoostClassifie
         l2_leaf_reg=5.0,
         random_seed=fold_seed,
         thread_count=-1,
-        verbose=200,
+        verbose=False,
         allow_writing_files=False,
     )
 
@@ -106,26 +126,49 @@ def main() -> None:
     args = parse_args()
     if args.folds < 2:
         raise ValueError("--folds must be at least 2")
+    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", args.run_id):
+        raise ValueError(
+            "--run-id may contain only letters, digits, dots, underscores and hyphens"
+        )
+    if args.catboost_log_every < 1 or args.lightgbm_log_every < 1:
+        raise ValueError("Progress intervals must be at least 1")
     args.output_dir.mkdir(parents=True, exist_ok=True)
+    logger = RunLogger("cv-ensemble", args.output_dir / "logs", args.run_id)
 
-    print("Loading data...", flush=True)
-    train = pd.read_csv(args.train)
-    test = pd.read_csv(args.test)
-    sample = pd.read_csv(args.sample_submission)
-    if list(sample.columns) != [ID_COLUMN, TARGET]:
-        raise ValueError("Unexpected sample submission schema")
-    if not test[ID_COLUMN].equals(sample[ID_COLUMN]):
-        raise ValueError("Test and sample submission ids differ")
+    with logger.step("Load and validate input CSV files"):
+        train = pd.read_csv(args.train)
+        test = pd.read_csv(args.test)
+        sample = pd.read_csv(args.sample_submission)
+        if list(sample.columns) != [ID_COLUMN, TARGET]:
+            raise ValueError("Unexpected sample submission schema")
+        if not test[ID_COLUMN].equals(sample[ID_COLUMN]):
+            raise ValueError("Test and sample submission ids differ")
 
-    features = [column for column in train.columns if column not in (ID_COLUMN, TARGET)]
-    if features != [column for column in test.columns if column != ID_COLUMN]:
-        raise ValueError("Train and test feature schemas differ")
-    y = train[TARGET]
-    categorical = train[features].select_dtypes(
-        include=["object", "string", "category"]
-    ).columns.tolist()
-    x_cat, test_cat = prepare_catboost(train[features], test[features], categorical)
-    x_lgb, test_lgb = prepare_lightgbm(train[features], test[features], categorical)
+    with logger.step("Prepare CatBoost and LightGBM features"):
+        features = [
+            column for column in train.columns if column not in (ID_COLUMN, TARGET)
+        ]
+        if features != [column for column in test.columns if column != ID_COLUMN]:
+            raise ValueError("Train and test feature schemas differ")
+        y = train[TARGET]
+        categorical = train[features].select_dtypes(
+            include=["object", "string", "category"]
+        ).columns.tolist()
+        x_cat, test_cat = prepare_catboost(
+            train[features], test[features], categorical
+        )
+        x_lgb, test_lgb = prepare_lightgbm(
+            train[features], test[features], categorical
+        )
+    logger.info(
+        f"Data ready | train={len(train)}, test={len(test)}, features={len(features)}, "
+        f"categorical={len(categorical)}, positive_rate={y.mean():.6f}"
+    )
+    logger.info(
+        f"CV configuration | folds={args.folds}, seed={args.seed}, "
+        f"CatBoost=d{args.catboost_depth}/{args.catboost_iterations}, "
+        f"LightGBM={args.lightgbm_iterations}, blend={CATBOOST_WEIGHT:.0%}/{LIGHTGBM_WEIGHT:.0%}"
+    )
 
     row_count = len(train)
     test_count = len(test)
@@ -154,47 +197,71 @@ def main() -> None:
         fold_start = time.perf_counter()
         y_train = y.iloc[train_indices]
         y_valid = y.iloc[valid_indices]
-        print(
-            f"\n=== Fold {fold}/{args.folds}: "
-            f"train={len(train_indices)}, valid={len(valid_indices)} ===",
-            flush=True,
+        logger.info(
+            f"FOLD START | {fold}/{args.folds} | "
+            f"train={len(train_indices)}, valid={len(valid_indices)}, seed={fold_seed}"
         )
 
         cat_model = make_catboost(args, fold_seed)
-        cat_model.fit(
-            x_cat.iloc[train_indices],
-            y_train,
-            cat_features=categorical,
-            eval_set=(x_cat.iloc[valid_indices], y_valid),
-            early_stopping_rounds=60,
-            use_best_model=True,
+        with logger.step(f"Fold {fold}/{args.folds} | Train CatBoost"):
+            cat_model.fit(
+                x_cat.iloc[train_indices],
+                y_train,
+                cat_features=categorical,
+                eval_set=(x_cat.iloc[valid_indices], y_valid),
+                early_stopping_rounds=60,
+                use_best_model=True,
+                callbacks=[
+                    CatBoostProgressCallback(
+                        logger,
+                        f"Fold {fold}/{args.folds} CatBoost",
+                        args.catboost_iterations,
+                        args.catboost_log_every,
+                    )
+                ],
+            )
+        logger.info(
+            f"Fold {fold}/{args.folds} CatBoost best iterations="
+            f"{cat_model.get_best_iteration() + 1}"
         )
-        cat_valid = cat_model.predict_proba(x_cat.iloc[valid_indices])[:, 1]
-        cat_train = cat_model.predict_proba(x_cat.iloc[train_indices])[:, 1]
-        cat_test = cat_model.predict_proba(test_cat)[:, 1]
+        with logger.step(f"Fold {fold}/{args.folds} | CatBoost predictions"):
+            cat_valid = cat_model.predict_proba(x_cat.iloc[valid_indices])[:, 1]
+            cat_train = cat_model.predict_proba(x_cat.iloc[train_indices])[:, 1]
+            cat_test = cat_model.predict_proba(test_cat)[:, 1]
 
         lgb_model = make_lightgbm(args, fold_seed)
-        lgb_model.fit(
-            x_lgb.iloc[train_indices],
-            y_train,
-            categorical_feature=categorical,
-            eval_X=x_lgb.iloc[valid_indices],
-            eval_y=y_valid,
-            eval_metric="auc",
-            callbacks=[
-                lgb.early_stopping(100, verbose=True),
-                lgb.log_evaluation(period=300),
-            ],
+        with logger.step(f"Fold {fold}/{args.folds} | Train LightGBM"):
+            lgb_model.fit(
+                x_lgb.iloc[train_indices],
+                y_train,
+                categorical_feature=categorical,
+                eval_X=x_lgb.iloc[valid_indices],
+                eval_y=y_valid,
+                eval_metric="auc",
+                callbacks=[
+                    lgb.early_stopping(100, verbose=False),
+                    LightGBMProgressCallback(
+                        logger,
+                        f"Fold {fold}/{args.folds} LightGBM",
+                        args.lightgbm_iterations,
+                        args.lightgbm_log_every,
+                    ),
+                ],
+            )
+        logger.info(
+            f"Fold {fold}/{args.folds} LightGBM best iterations="
+            f"{lgb_model.best_iteration_}"
         )
-        lgb_valid = lgb_model.predict_proba(
-            x_lgb.iloc[valid_indices], num_iteration=lgb_model.best_iteration_
-        )[:, 1]
-        lgb_train = lgb_model.predict_proba(
-            x_lgb.iloc[train_indices], num_iteration=lgb_model.best_iteration_
-        )[:, 1]
-        lgb_test = lgb_model.predict_proba(
-            test_lgb, num_iteration=lgb_model.best_iteration_
-        )[:, 1]
+        with logger.step(f"Fold {fold}/{args.folds} | LightGBM predictions"):
+            lgb_valid = lgb_model.predict_proba(
+                x_lgb.iloc[valid_indices], num_iteration=lgb_model.best_iteration_
+            )[:, 1]
+            lgb_train = lgb_model.predict_proba(
+                x_lgb.iloc[train_indices], num_iteration=lgb_model.best_iteration_
+            )[:, 1]
+            lgb_test = lgb_model.predict_proba(
+                test_lgb, num_iteration=lgb_model.best_iteration_
+            )[:, 1]
 
         cat_valid_rank = percentile_rank(cat_valid)
         lgb_valid_rank = percentile_rank(lgb_valid)
@@ -222,11 +289,10 @@ def main() -> None:
             "elapsed_seconds": time.perf_counter() - fold_start,
         }
         fold_results.append(result)
-        print(
-            f"Fold {fold}: CatBoost={cat_auc:.10f}, "
+        logger.info(
+            f"FOLD RESULT | {fold}/{args.folds} | CatBoost={cat_auc:.10f}, "
             f"LightGBM={lgb_auc:.10f}, blend={blend_auc:.10f}, "
-            f"blend vs LightGBM={blend_auc - lgb_auc:+.10f}",
-            flush=True,
+            f"blend_vs_LightGBM={blend_auc - lgb_auc:+.10f}"
         )
 
         cat_oof[valid_indices] = cat_valid
@@ -238,6 +304,12 @@ def main() -> None:
         lgb_test_probability_sum += lgb_test
         cat_test_rank_sum += percentile_rank(cat_test)
         lgb_test_rank_sum += percentile_rank(lgb_test)
+        cv_elapsed = time.perf_counter() - total_start
+        fold_eta = cv_elapsed / fold * (args.folds - fold)
+        logger.info(
+            f"FOLD DONE | {fold}/{args.folds} ({100 * fold / args.folds:.1f}%) | "
+            f"elapsed={format_duration(cv_elapsed)} | ETA={format_duration(fold_eta)}"
+        )
 
     for name, values in (
         ("cat_oof", cat_oof),
@@ -300,48 +372,51 @@ def main() -> None:
         "elapsed_seconds": time.perf_counter() - total_start,
     }
     metrics_path = args.output_dir / f"metrics_{args.run_id}_cv.json"
-    metrics_path.write_text(
-        json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8"
-    )
+    with logger.step("Save CV metrics and OOF/test predictions"):
+        metrics_path.write_text(
+            json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
 
-    pd.DataFrame(
-        {
-            "row_index": train.index,
-            "fold": fold_number,
-            "target": y,
-            "catboost_prediction": cat_oof,
-            "lightgbm_prediction": lgb_oof,
-            "catboost_fold_rank": cat_rank_oof,
-            "lightgbm_fold_rank": lgb_rank_oof,
-            "blend_prediction": blend_oof,
-        }
-    ).to_csv(args.output_dir / f"oof_predictions_{args.run_id}.csv", index=False)
+        pd.DataFrame(
+            {
+                "row_index": train.index,
+                "fold": fold_number,
+                "target": y,
+                "catboost_prediction": cat_oof,
+                "lightgbm_prediction": lgb_oof,
+                "catboost_fold_rank": cat_rank_oof,
+                "lightgbm_fold_rank": lgb_rank_oof,
+                "blend_prediction": blend_oof,
+            }
+        ).to_csv(
+            args.output_dir / f"oof_predictions_{args.run_id}.csv", index=False
+        )
 
-    pd.DataFrame(
-        {
-            ID_COLUMN: test[ID_COLUMN],
-            "catboost_probability": cat_test_probability,
-            "lightgbm_probability": lgb_test_probability,
-            "catboost_cv_rank": cat_test_rank,
-            "lightgbm_cv_rank": lgb_test_rank,
-            "blend_cv_rank": blend_test_rank,
-        }
-    ).to_csv(
-        args.output_dir / f"test_predictions_{args.run_id}.csv", index=False
-    )
+        pd.DataFrame(
+            {
+                ID_COLUMN: test[ID_COLUMN],
+                "catboost_probability": cat_test_probability,
+                "lightgbm_probability": lgb_test_probability,
+                "catboost_cv_rank": cat_test_rank,
+                "lightgbm_cv_rank": lgb_test_rank,
+                "blend_cv_rank": blend_test_rank,
+            }
+        ).to_csv(
+            args.output_dir / f"test_predictions_{args.run_id}.csv", index=False
+        )
 
-    print("\n=== OOF summary ===", flush=True)
-    print(f"CatBoost raw OOF AUC: {cat_raw_oof_auc:.10f}", flush=True)
-    print(f"LightGBM raw OOF AUC: {lgb_raw_oof_auc:.10f}", flush=True)
-    print(f"LightGBM fold-rank OOF AUC: {lgb_rank_oof_auc:.10f}", flush=True)
-    print(f"Blend fold-rank OOF AUC: {blend_oof_auc:.10f}", flush=True)
-    print(
-        f"Blend gain vs LightGBM: {blend_oof_auc - lgb_rank_oof_auc:+.10f}; "
-        f"fold wins: {fold_wins}/{args.folds}",
-        flush=True,
+    logger.info("OOF SUMMARY")
+    logger.info(f"CatBoost raw OOF AUC={cat_raw_oof_auc:.10f}")
+    logger.info(f"LightGBM raw OOF AUC={lgb_raw_oof_auc:.10f}")
+    logger.info(f"LightGBM fold-rank OOF AUC={lgb_rank_oof_auc:.10f}")
+    logger.info(f"Blend fold-rank OOF AUC={blend_oof_auc:.10f}")
+    logger.info(
+        f"Blend gain vs LightGBM={blend_oof_auc - lgb_rank_oof_auc:+.10f}; "
+        f"fold wins={fold_wins}/{args.folds}"
     )
-    print(f"Selected submission: {summary['selected_submission']}", flush=True)
-    print(f"Metrics saved to {metrics_path}", flush=True)
+    logger.info(f"Selected submission={summary['selected_submission']}")
+    logger.info(f"Metrics saved to {metrics_path}")
+    logger.finish()
 
 
 if __name__ == "__main__":

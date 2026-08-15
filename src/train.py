@@ -17,6 +17,8 @@ from sklearn.model_selection import train_test_split
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
 
+from progress_logging import CatBoostProgressCallback, RunLogger
+
 
 TARGET = "addicted_label"
 ID_COLUMN = "id"
@@ -43,6 +45,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--iterations", type=int, default=400)
     parser.add_argument("--depth", type=int, default=7)
     parser.add_argument("--early-stopping-rounds", type=int, default=60)
+    parser.add_argument(
+        "--log-every",
+        type=int,
+        default=100,
+        help="Write model progress every N iterations.",
+    )
     parser.add_argument("--output-dir", type=Path, default=Path("artifacts"))
     parser.add_argument(
         "--run-id",
@@ -136,6 +144,7 @@ def validate_catboost(
     target: pd.Series,
     categorical: list[str],
     args: argparse.Namespace,
+    logger: RunLogger,
 ) -> tuple[float, int, CatBoostClassifier, pd.DataFrame]:
     x_train, x_valid, y_train, y_valid = train_test_split(
         train_features,
@@ -144,7 +153,10 @@ def validate_catboost(
         random_state=RANDOM_SEED,
         stratify=target,
     )
-    model = make_catboost(args.iterations, args.depth, verbose=100)
+    logger.info(
+        f"Validation split ready | train={len(x_train)}, valid={len(x_valid)}"
+    )
+    model = make_catboost(args.iterations, args.depth, verbose=False)
     model.fit(
         x_train,
         y_train,
@@ -152,6 +164,14 @@ def validate_catboost(
         eval_set=(x_valid, y_valid),
         early_stopping_rounds=args.early_stopping_rounds,
         use_best_model=True,
+        callbacks=[
+            CatBoostProgressCallback(
+                logger,
+                "CatBoost validation training",
+                args.iterations,
+                args.log_every,
+            )
+        ],
     )
     probabilities = model.predict_proba(x_valid)[:, 1]
     auc = roc_auc_score(y_valid, probabilities)
@@ -240,23 +260,37 @@ def main() -> None:
         raise ValueError(
             "--run-id may contain only letters, digits, dots, underscores and hyphens"
         )
+    if args.log_every < 1:
+        raise ValueError("--log-every must be at least 1")
     args.output_dir.mkdir(parents=True, exist_ok=True)
+    logger = RunLogger(
+        "train",
+        args.output_dir / "logs",
+        args.run_id or args.model,
+    )
 
-    print("Loading data...")
-    train = pd.read_csv(args.train)
-    test = pd.read_csv(args.test)
-    sample_submission = pd.read_csv(args.sample_submission)
-    features = check_inputs(train, test, sample_submission)
+    with logger.step("Load and validate input CSV files"):
+        train = pd.read_csv(args.train)
+        test = pd.read_csv(args.test)
+        sample_submission = pd.read_csv(args.sample_submission)
+        features = check_inputs(train, test, sample_submission)
 
-    x = train[features]
-    x_test = test[features]
-    y = train[TARGET]
-    categorical = categorical_columns(x)
-    numeric = [column for column in features if column not in categorical]
+    with logger.step("Prepare feature lists"):
+        x = train[features]
+        x_test = test[features]
+        y = train[TARGET]
+        categorical = categorical_columns(x)
+        numeric = [column for column in features if column not in categorical]
 
-    print(f"Train shape: {train.shape}; test shape: {test.shape}")
-    print(f"Positive rate: {y.mean():.6f}")
-    print(f"Model: {args.model}")
+    logger.info(f"Train shape={train.shape}; test shape={test.shape}")
+    logger.info(
+        f"Features={len(features)}; numeric={len(numeric)}; "
+        f"categorical={len(categorical)}; positive_rate={y.mean():.6f}"
+    )
+    logger.info(
+        f"Configuration | model={args.model}, iterations={args.iterations}, "
+        f"depth={args.depth}, skip_final={args.skip_final}, final_only={args.final_only}"
+    )
 
     metrics: dict[str, float | int | str] = {
         "model": args.model,
@@ -269,75 +303,91 @@ def main() -> None:
     if args.model == "catboost":
         metrics["requested_iterations"] = args.iterations
         metrics["depth"] = args.depth
-        x, x_test = prepare_catboost_categories(x, x_test, categorical)
+        with logger.step("Prepare CatBoost categorical features"):
+            x, x_test = prepare_catboost_categories(x, x_test, categorical)
         if args.final_only:
             best_iterations = args.iterations
             metrics["best_iterations"] = best_iterations
         else:
-            auc, best_iterations, validation_model, validation_predictions = validate_catboost(
-                x, y, categorical, args
-            )
+            with logger.step("Validate CatBoost"):
+                auc, best_iterations, validation_model, validation_predictions = validate_catboost(
+                    x, y, categorical, args, logger
+                )
             metrics["validation_auc"] = auc
             metrics["best_iterations"] = best_iterations
-            print(f"Validation ROC AUC: {auc:.6f}")
-            print(f"Best iteration count: {best_iterations}")
+            logger.info(f"Validation ROC AUC={auc:.10f}")
+            logger.info(f"Best iteration count={best_iterations}")
 
-            importances = pd.DataFrame(
-                {
-                    "feature": features,
-                    "importance": validation_model.get_feature_importance(),
-                }
-            ).sort_values("importance", ascending=False)
-            diagnostic_suffix = f"_{args.run_id}" if args.run_id else ""
-            importances.to_csv(
-                args.output_dir / f"feature_importance{diagnostic_suffix}.csv",
-                index=False,
-            )
-            print("\nFeature importance:")
-            print(importances.to_string(index=False))
-
-            validation_auc = (
-                validation_model.get_evals_result()
-                .get("validation", {})
-                .get("AUC")
-            )
-            if validation_auc:
-                pd.DataFrame(
+            with logger.step("Save validation diagnostics"):
+                importances = pd.DataFrame(
                     {
-                        "iteration": range(1, len(validation_auc) + 1),
-                        "validation_auc": validation_auc,
+                        "feature": features,
+                        "importance": validation_model.get_feature_importance(),
                     }
-                ).to_csv(
-                    args.output_dir / f"learning_curve{diagnostic_suffix}.csv",
+                ).sort_values("importance", ascending=False)
+                diagnostic_suffix = f"_{args.run_id}" if args.run_id else ""
+                importances.to_csv(
+                    args.output_dir / f"feature_importance{diagnostic_suffix}.csv",
                     index=False,
                 )
-            if args.save_validation_predictions:
-                validation_predictions.to_csv(
-                    args.output_dir
-                    / f"validation_predictions{diagnostic_suffix}_catboost.csv",
-                    index=False,
+                logger.info(f"Feature importance:\n{importances.to_string(index=False)}")
+
+                validation_auc = (
+                    validation_model.get_evals_result()
+                    .get("validation", {})
+                    .get("AUC")
                 )
+                if validation_auc:
+                    pd.DataFrame(
+                        {
+                            "iteration": range(1, len(validation_auc) + 1),
+                            "validation_auc": validation_auc,
+                        }
+                    ).to_csv(
+                        args.output_dir / f"learning_curve{diagnostic_suffix}.csv",
+                        index=False,
+                    )
+                if args.save_validation_predictions:
+                    validation_predictions.to_csv(
+                        args.output_dir
+                        / f"validation_predictions{diagnostic_suffix}_catboost.csv",
+                        index=False,
+                    )
 
         if not args.skip_final:
-            print("\nTraining final model on all training rows...")
-            final_model = make_catboost(best_iterations, args.depth, verbose=100)
-            final_model.fit(x, y, cat_features=categorical)
-            final_model.save_model(args.output_dir / "catboost_model.cbm")
-            test_probabilities = final_model.predict_proba(x_test)[:, 1]
+            with logger.step("Train final CatBoost on all rows"):
+                final_model = make_catboost(best_iterations, args.depth, verbose=False)
+                final_model.fit(
+                    x,
+                    y,
+                    cat_features=categorical,
+                    callbacks=[
+                        CatBoostProgressCallback(
+                            logger,
+                            "CatBoost final training",
+                            best_iterations,
+                            args.log_every,
+                        )
+                    ],
+                )
+            with logger.step("Save CatBoost model and predict test rows"):
+                final_model.save_model(args.output_dir / "catboost_model.cbm")
+                test_probabilities = final_model.predict_proba(x_test)[:, 1]
     else:
         if not args.final_only:
-            auc, validation_model = validate_logistic(
-                x, y, numeric, categorical, args.validation_size
-            )
+            with logger.step("Validate logistic regression"):
+                auc, validation_model = validate_logistic(
+                    x, y, numeric, categorical, args.validation_size
+                )
             metrics["validation_auc"] = auc
-            print(f"Validation ROC AUC: {auc:.6f}")
+            logger.info(f"Validation ROC AUC={auc:.10f}")
 
         if not args.skip_final:
-            print("\nTraining final model on all training rows...")
-            final_model = make_logistic(numeric, categorical)
-            final_model.fit(x, y)
-            joblib.dump(final_model, args.output_dir / "logistic_model.joblib")
-            test_probabilities = final_model.predict_proba(x_test)[:, 1]
+            with logger.step("Train final logistic regression and predict test rows"):
+                final_model = make_logistic(numeric, categorical)
+                final_model.fit(x, y)
+                joblib.dump(final_model, args.output_dir / "logistic_model.joblib")
+                test_probabilities = final_model.predict_proba(x_test)[:, 1]
 
     metrics_parts = ["metrics"]
     if args.run_id:
@@ -346,19 +396,24 @@ def main() -> None:
     if args.final_only:
         metrics_parts.append("final")
     metrics_path = args.output_dir / f"{'_'.join(metrics_parts)}.json"
-    metrics_path.write_text(
-        json.dumps(metrics, ensure_ascii=False, indent=2), encoding="utf-8"
-    )
-    print(f"Metrics saved to {metrics_path}")
+    with logger.step("Save run metrics"):
+        metrics_path.write_text(
+            json.dumps(metrics, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
+    logger.info(f"Metrics saved to {metrics_path}")
 
     if not args.skip_final:
         submission_path = Path("submission.csv")
-        write_submission(sample_submission, test_probabilities, submission_path)
-        print(f"Submission saved to {submission_path} ({len(test_probabilities)} rows)")
-        print(
-            "Prediction range: "
+        with logger.step("Create submission"):
+            write_submission(sample_submission, test_probabilities, submission_path)
+        logger.info(
+            f"Submission saved to {submission_path} ({len(test_probabilities)} rows)"
+        )
+        logger.info(
+            "Prediction range="
             f"[{test_probabilities.min():.6f}, {test_probabilities.max():.6f}]"
         )
+    logger.finish()
 
 
 if __name__ == "__main__":

@@ -6,17 +6,23 @@
 
 ## Текущий результат
 
-Последний итоговый эксперимент —
-[`exp-001`](notes/experiments/exp-001-cv-gradient-boosting-ensemble.md):
+Новый локальный итоговый эксперимент —
+[`exp-002`](notes/experiments/exp-002-max-lightgbm.md); его Kaggle score ожидается:
 
 | Версия | Локальная проверка | Kaggle leaderboard |
 |---|---:|---:|
 | `exp-000`: CatBoost d7/400 | holdout 0.955008 | 0.95663 |
 | `exp-001`: 3-fold rank ensemble | **OOF 0.963154** | **0.96466** |
+| `exp-002`: 5-fold high-budget LightGBM | **OOF 0.964047** | pending |
 
-`exp-001` смешивает fold-ranks: 15% CatBoost d8/1000 и 85% LightGBM. Он улучшил
-Kaggle score относительно первого baseline на `+0.00803`. Актуальная история
-маленьких проверок находится в [`notes/TRIALS.md`](notes/TRIALS.md).
+`exp-002` использует только LightGBM и принятые feature-engineering улучшения;
+увеличенный бюджет дал `+0.001802` OOF к быстрому `trial-014`. История маленьких
+проверок находится в [`notes/TRIALS.md`](notes/TRIALS.md).
+
+Активная быстрая линия дальнейших trial использует чистый LightGBM на 500
+деревьев с 5-fold CV. CatBoost-ансамбль сохранён как исторический `exp-001`, но
+в новых trial не обучается. Текущий лучший trial этой линии — `trial-014`: OOF
+`0.962243`, Kaggle `0.96412`.
 
 ## Структура репозитория
 
@@ -26,12 +32,19 @@ docs/competition/        сохранённые условия соревнов�
 notes/                   контекст проекта и правила экспериментов
 notes/experiments/       отдельная карточка каждого эксперимента
 src/train.py             валидация, обучение и создание submission
+src/cv_lightgbm.py       быстрые LGBM-only CV, OOF и optional submission
+src/progress_logging.py  общие консольные и файловые логи прогресса
+tests/                   быстрые проверки инфраструктурного кода
 artifacts/               локальные модели и метрики, игнорируются Git
 requirements.txt         зафиксированные версии библиотек
 ```
 
 Перед продолжением работы прочитай [`notes/CURRENT_STATE.md`](notes/CURRENT_STATE.md).
 Подробная логика первого решения записана в карточке эксперимента.
+
+В корне поддерживается один актуальный Kaggle-файл `submission.csv`. Он создаётся
+или перезаписывается только по явной просьбе; отдельные файлы с суффиксами
+trial/exp не сохраняются.
 
 ## Данные
 
@@ -89,6 +102,38 @@ py -3.12 -m venv .venv
 
 ```powershell
 .\.venv\Scripts\python.exe src\train.py --model catboost --iterations 400 --final-only
+```
+
+## Логи выполнения
+
+Все скрипты показывают этапы работы в консоли и одновременно сохраняют те же
+сообщения в `artifacts/logs/`. Имя файла содержит время запуска, название скрипта
+и `run-id`, поэтому логи разных запусков не перезаписываются.
+
+Во время обучения выводятся:
+
+- текущий этап (`START`, `PROGRESS`, `DONE` или `FAILED`);
+- номер итерации, процент выполнения и примерный ETA;
+- текущие train/validation-метрики;
+- активные fold и модель при CV;
+- длительность этапов и пути сохранённых файлов.
+
+Частота сообщений настраивается без изменения модели:
+
+```powershell
+.\.venv\Scripts\python.exe src\train.py --model catboost --iterations 1000 --log-every 50 --skip-final
+.\.venv\Scripts\python.exe src\cv_ensemble.py --catboost-log-every 50 --lightgbm-log-every 200
+```
+
+`src/cv_lightgbm.py` по умолчанию не создаёт Kaggle CSV. Submission записывается
+только по явной команде с `--submission путь.csv`; метрики, OOF и test predictions
+при этом сохраняются для каждого trial независимо.
+
+Последний лог можно наблюдать из второго PowerShell-окна во время работы:
+
+```powershell
+$latestLog = Get-ChildItem artifacts\logs\*.log | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+Get-Content $latestLog.FullName -Wait
 ```
 
 ## Как ведутся эксперименты
