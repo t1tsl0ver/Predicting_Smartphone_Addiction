@@ -6,15 +6,15 @@
 
 ## Текущий результат
 
-Новый локальный итоговый эксперимент —
-[`exp-003`](notes/experiments/exp-003-exact-value-lightgbm.md); его Kaggle score ожидается:
+Новый итоговый эксперимент —
+[`exp-003`](notes/experiments/exp-003-exact-value-lightgbm.md):
 
 | Версия | Локальная проверка | Kaggle leaderboard |
 |---|---:|---:|
 | `exp-000`: CatBoost d7/400 | holdout 0.955008 | 0.95663 |
 | `exp-001`: 3-fold rank ensemble | **OOF 0.963154** | **0.96466** |
 | `exp-002`: 5-fold high-budget LightGBM | **OOF 0.964047** | pending |
-| `exp-003`: exact-value LightGBM, LR 0.01 | **OOF 0.965044** | pending |
+| `exp-003`: exact-value LightGBM, LR 0.01 | **OOF 0.965044** | **0.96681** |
 
 `exp-003` использует принятые feature-engineering улучшения и categorical-копии
 точных числовых значений. Меньший learning rate и fold early stopping дали

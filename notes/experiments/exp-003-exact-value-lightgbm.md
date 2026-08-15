@@ -1,6 +1,6 @@
 # exp-003 — Exact-value LightGBM with a low learning rate
 
-- Статус: **completed locally; Kaggle score pending**
+- Статус: **completed**
 - Дата: 2026-08-15
 - Контроли: `trial-019` и `exp-002`
 - Модель: чистый LightGBM с numeric exact-value categories
@@ -109,7 +109,7 @@ prediction=mean fold percentile ranks
 min=0.000004724909
 max=0.999994600104
 sha256=c4f72dd11b12d50833772da886986ba23516f3fee6471901ee59856bb271e960
-Kaggle score=pending
+Kaggle score=0.96681
 ```
 
 Колонки равны `id, addicted_label`, ID полностью совпадают с
@@ -121,5 +121,5 @@ Kaggle score=pending
 Маленький learning rate и individual best iteration раскрыли exact-value
 encoding сильнее фиксированных 500 деревьев. `exp-003` — новый локальный лидер:
 fold-rank OOF `0.9650442`, прирост почти `+0.0010` к `exp-002`, победа 5/5 folds
-и полностью положительный paired row bootstrap. Окончательный статус будет
-дополнен после загрузки submission на Kaggle.
+и полностью положительный paired row bootstrap. Kaggle подтвердил улучшение:
+score `0.96681`, что на `+0.00215` выше `exp-001` (`0.96466`).
