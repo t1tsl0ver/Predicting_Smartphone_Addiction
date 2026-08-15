@@ -21,7 +21,8 @@
 | [`trial-017`](trials/trial-017-stress-weekend-ratio.md) | Возврат stress + weekend/daily ratio | **0.961978** OOF | **-0.000265** | rejected; won 4/5 but total delta negative |
 | [`trial-018`](trials/trial-018-drop-academic-work-impact.md) | Удалён `academic_work_impact` | **0.962082** OOF | **-0.000161** | rejected; won 3/5 but total delta negative |
 | [`trial-019`](trials/trial-019-numeric-exact-categories.md) | Добавлены categorical-копии точных числовых значений | **0.964025** OOF | **+0.001782** | accepted; won 5/5, paired CI above zero |
+| [`trial-020`](trials/trial-020-cat-smooth-20.md) | LightGBM `cat_smooth`: 10 → 20 | **0.963977** OOF | **-0.000048** | rejected; won 3/5, paired CI crosses zero |
 
-Следующий ID: `trial-020`. Активная линия разработки использует чистый LightGBM
+Следующий ID: `trial-021`. Активная линия разработки использует чистый LightGBM
 на 500 деревьев с 5-fold CV; CatBoost и ансамбль остаются только историческими
 результатами `exp-001`.

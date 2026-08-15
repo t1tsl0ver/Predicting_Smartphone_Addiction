@@ -60,6 +60,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--reg-alpha", type=float, default=0.0)
     parser.add_argument("--reg-lambda", type=float, default=0.0)
     parser.add_argument(
+        "--cat-smooth",
+        type=float,
+        default=10.0,
+        help="LightGBM categorical smoothing strength.",
+    )
+    parser.add_argument(
         "--early-stopping-rounds",
         type=int,
         default=0,
@@ -174,6 +180,7 @@ def make_model(args: argparse.Namespace, fold_seed: int) -> lgb.LGBMClassifier:
         min_child_samples=args.min_child_samples,
         reg_alpha=args.reg_alpha,
         reg_lambda=args.reg_lambda,
+        cat_smooth=args.cat_smooth,
         random_state=fold_seed,
         n_jobs=-1,
         verbosity=-1,
@@ -188,6 +195,8 @@ def main() -> None:
         raise ValueError("Iterations and log interval must be at least 1")
     if args.early_stopping_rounds < 0:
         raise ValueError("--early-stopping-rounds must be non-negative")
+    if args.cat_smooth < 0:
+        raise ValueError("--cat-smooth must be non-negative")
     if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", args.run_id):
         raise ValueError(
             "--run-id may contain only letters, digits, dots, underscores and hyphens"
@@ -322,6 +331,7 @@ def main() -> None:
         f"num_leaves={args.num_leaves}, max_depth={args.max_depth}, "
         f"min_child_samples={args.min_child_samples}, "
         f"reg_alpha={args.reg_alpha}, reg_lambda={args.reg_lambda}, "
+        f"cat_smooth={args.cat_smooth}, "
         f"early_stopping_rounds={args.early_stopping_rounds}, "
         f"drop_features={args.drop_features}, "
         f"add_other_screen_time={args.add_other_screen_time}, "
@@ -534,6 +544,7 @@ def main() -> None:
             "min_child_samples": args.min_child_samples,
             "reg_alpha": args.reg_alpha,
             "reg_lambda": args.reg_lambda,
+            "cat_smooth": args.cat_smooth,
             "early_stopping_rounds": args.early_stopping_rounds,
             "drop_features": args.drop_features,
             "add_other_screen_time": args.add_other_screen_time,
