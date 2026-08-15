@@ -7,7 +7,7 @@
 | [`exp-002`](experiments/exp-002-max-lightgbm.md) | 5-fold high-budget pure LightGBM с принятыми FE | **0.964047 OOF** | pending | completed locally |
 | [`exp-003`](experiments/exp-003-exact-value-lightgbm.md) | Exact-value categories, LR 0.01 и fold early stopping | **0.965044 OOF** | **0.96681** | completed |
 | [`exp-004`](experiments/exp-004-high-capacity-exact-value-lightgbm.md) | Конфигурация `exp-002` с exact-value categories | **0.964587 OOF** | **0.96668** | completed; rejected vs `exp-003` |
-| [`exp-005`](experiments/exp-005-exp003-exp002-rank-blend.md) | 60/40 rank blend `exp-003` + `exp-002` | **0.966874 OOF** | pending | completed locally |
+| [`exp-005`](experiments/exp-005-exp003-exp002-rank-blend.md) | 60/40 rank blend `exp-003` + `exp-002` | **0.966874 OOF** | **0.96827** | completed |
 
-`exp-005` — новый локальный лидер; `exp-003` остаётся leaderboard-лидером до
-получения score нового submission. Следующий итоговый ID — `exp-006`.
+`exp-005` — новый локальный и leaderboard-лидер. Следующий итоговый ID —
+`exp-006`.

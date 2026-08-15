@@ -16,7 +16,7 @@
 | `exp-002`: 5-fold high-budget LightGBM | **OOF 0.964047** | pending |
 | `exp-003`: exact-value LightGBM, LR 0.01 | **OOF 0.965044** | **0.96681** |
 | `exp-004`: high-capacity exact-value LightGBM | **OOF 0.964587** | **0.96668** |
-| `exp-005`: 60/40 rank blend `exp-003` + `exp-002` | **OOF 0.966874** | pending |
+| `exp-005`: 60/40 rank blend `exp-003` + `exp-002` | **OOF 0.966874** | **0.96827** |
 
 `exp-003` использует принятые feature-engineering улучшения и categorical-копии
 точных числовых значений. Меньший learning rate и fold early stopping дали
@@ -27,7 +27,7 @@
 Она улучшила `exp-002`, но проиграла `exp-003` на всех 5 folds, поэтому локальным
 лидером среди одиночных моделей остаётся `exp-003`. `exp-005` смешал ranks
 `exp-003` и `exp-002` в пропорции 60/40 и стал новым общим локальным лидером с
-OOF `0.966874`.
+OOF `0.966874` и новым leaderboard-лидером со score `0.96827`.
 
 Активная линия дальнейших trial использует чистый LightGBM на 250 деревьев с
 5-fold CV. `trial-019` добавил categorical-копии точных числовых значений и

@@ -1,6 +1,6 @@
 # exp-005 — Conservative rank blend of exp-003 and exp-002
 
-- Статус: **completed locally; Kaggle score pending**
+- Статус: **completed**
 - Дата: 2026-08-15
 - Компоненты: `exp-003` и `exp-002`
 - Метод: фиксированный weighted rank blend без переобучения моделей
@@ -91,7 +91,7 @@ prediction=0.60 * exp-003 CV rank + 0.40 * exp-002 CV rank
 min=0.000012014769
 max=0.999890517108
 sha256=546dddd18ae79e7220266e07801c042aaba6faf37ef57dc42f6f46d183e6ce32
-Kaggle score=pending
+Kaggle score=0.96827
 ```
 
 Колонки равны `id, addicted_label`, ID полностью совпадают с
@@ -102,5 +102,6 @@ Kaggle score=pending
 
 `exp-005` становится новым локальным лидером. Прирост существенно больше
 наблюдаемого noise floor и согласован на всех folds. Главный оставшийся риск —
-перенос подобранного OOF-веса на Public/Private leaderboard; окончательное
-решение принимается после Kaggle score.
+перенос подобранного OOF-веса на Private leaderboard. Public Kaggle score
+`0.96827` подтвердил направление и дал `+0.00146` к `exp-003` (`0.96681`) при
+локально ожидавшемся приросте `+0.00183`.
