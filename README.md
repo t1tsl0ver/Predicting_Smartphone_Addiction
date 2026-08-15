@@ -15,11 +15,16 @@
 | `exp-001`: 3-fold rank ensemble | **OOF 0.963154** | **0.96466** |
 | `exp-002`: 5-fold high-budget LightGBM | **OOF 0.964047** | pending |
 | `exp-003`: exact-value LightGBM, LR 0.01 | **OOF 0.965044** | **0.96681** |
+| `exp-004`: high-capacity exact-value LightGBM | **OOF 0.964587** | pending |
 
 `exp-003` использует принятые feature-engineering улучшения и categorical-копии
 точных числовых значений. Меньший learning rate и fold early stopping дали
 `+0.000997` OOF к `exp-002`. История маленьких проверок находится в
 [`notes/TRIALS.md`](notes/TRIALS.md).
+
+`exp-004` перенёс exact-value encoding в более ёмкую конфигурацию `exp-002`.
+Она улучшила `exp-002`, но проиграла `exp-003` на всех 5 folds, поэтому локальным
+лидером остаётся `exp-003`.
 
 Активная линия дальнейших trial использует чистый LightGBM на 500 деревьев с
 5-fold CV. `trial-019` добавил categorical-копии точных числовых значений и
