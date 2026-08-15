@@ -25,6 +25,18 @@ SCREEN_SOCIAL_LOAD = "screen_social_load"
 HIGH_STRESS_OTHER_SCREEN_PER_SLEEP = "high_stress_other_screen_per_sleep"
 OVERALL_SCREEN_PRESSURE = "overall_screen_pressure"
 CORE_SCREEN_PRESSURE = "core_screen_pressure"
+EXACT_VALUE_SUFFIX = "_exact"
+RAW_NUMERIC_FEATURES = (
+    "age",
+    "daily_screen_time_hours",
+    "social_media_hours",
+    "gaming_hours",
+    "work_study_hours",
+    "sleep_hours",
+    "notifications_per_day",
+    "app_opens_per_day",
+    "weekend_screen_time",
+)
 
 
 def parse_args() -> argparse.Namespace:
@@ -94,6 +106,14 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Add mean normalized daily, weekend and social-media screen time.",
     )
+    parser.add_argument(
+        "--add-numeric-exact-categories",
+        action="store_true",
+        help=(
+            "Add categorical copies of the exact values of retained raw numeric "
+            "features while keeping their numeric versions."
+        ),
+    )
     parser.add_argument("--log-every", type=int, default=100)
     parser.add_argument("--output-dir", type=Path, default=Path("artifacts"))
     parser.add_argument(
@@ -108,6 +128,24 @@ def parse_args() -> argparse.Namespace:
 
 def percentile_rank(values: np.ndarray) -> np.ndarray:
     return pd.Series(values).rank(method="average", pct=True).to_numpy()
+
+
+def add_numeric_exact_categories(
+    frame: pd.DataFrame,
+    source_columns: list[str] | tuple[str, ...] = RAW_NUMERIC_FEATURES,
+) -> list[str]:
+    missing_columns = [column for column in source_columns if column not in frame]
+    if missing_columns:
+        raise ValueError(
+            f"Cannot create exact-value categories; missing columns: {missing_columns}"
+        )
+
+    created: list[str] = []
+    for column in source_columns:
+        exact_column = f"{column}{EXACT_VALUE_SUFFIX}"
+        frame[exact_column] = frame[column].astype("string")
+        created.append(exact_column)
+    return created
 
 
 def prepare_lightgbm(
@@ -235,6 +273,21 @@ def main() -> None:
                 frame[CORE_SCREEN_PRESSURE] = normalized_screen.mean(
                     axis=1, skipna=True
                 )
+        exact_value_features: list[str] = []
+        if args.add_numeric_exact_categories:
+            exact_value_sources = [
+                column
+                for column in RAW_NUMERIC_FEATURES
+                if column not in args.drop_features
+            ]
+            exact_value_features = add_numeric_exact_categories(
+                train, exact_value_sources
+            )
+            test_exact_value_features = add_numeric_exact_categories(
+                test, exact_value_sources
+            )
+            if exact_value_features != test_exact_value_features:
+                raise ValueError("Train and test exact-value feature schemas differ")
         all_features = [
             column for column in train.columns if column not in (ID_COLUMN, TARGET)
         ]
@@ -279,8 +332,18 @@ def main() -> None:
         "add_high_stress_other_screen_per_sleep="
         f"{args.add_high_stress_other_screen_per_sleep}, "
         f"add_overall_screen_pressure={args.add_overall_screen_pressure}, "
-        f"add_core_screen_pressure={args.add_core_screen_pressure}"
+        f"add_core_screen_pressure={args.add_core_screen_pressure}, "
+        "add_numeric_exact_categories="
+        f"{args.add_numeric_exact_categories}"
     )
+    if exact_value_features:
+        logger.info(
+            "Exact-value categories | "
+            + ", ".join(
+                f"{column}={train[column].nunique(dropna=True)}"
+                for column in exact_value_features
+            )
+        )
     if args.add_other_screen_time:
         available_other = train[OTHER_SCREEN_TIME].dropna()
         logger.info(
@@ -484,6 +547,8 @@ def main() -> None:
             ),
             "add_overall_screen_pressure": args.add_overall_screen_pressure,
             "add_core_screen_pressure": args.add_core_screen_pressure,
+            "add_numeric_exact_categories": args.add_numeric_exact_categories,
+            "exact_value_features": exact_value_features,
         },
         "raw_oof_auc": raw_oof_auc,
         "fold_rank_oof_auc": rank_oof_auc,

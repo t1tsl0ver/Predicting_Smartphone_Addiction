@@ -1,6 +1,6 @@
 # Current state
 
-Последнее обновление: 2026-08-14.
+Последнее обновление: 2026-08-15.
 
 ## Цель проекта
 
@@ -102,6 +102,18 @@
   `trial-014`): три маленькие победы folds были перевешены проигрышами первого и
   третьего folds. Удаление отклонено, категория сохраняется, submission не
   создавался.
+- `trial-019` добавил categorical-копии точных значений девяти исходных
+  числовых колонок, сохранив их числовые версии. Raw OOF вырос до `0.9640250`
+  (`+0.0017819` к `trial-014`), изменение выиграло 5/5 folds.
+- Paired stratified bootstrap raw OOF delta на 300 выборках размера test дал
+  95% interval `[+0.0014480, +0.0020813]`; это оценка row-sampling uncertainty,
+  не гарантия Private LB или устойчивости повторного обучения.
+- `trial-019` почти сравнялся с `exp-002`: raw OOF ниже на `0.0000177`, при этом
+  CV занял `5:00` против `19:47`. Exact encoding принят и становится активным
+  контролем trial-линии.
+- Mean train AUC `trial-019` достиг `0.99459`. На всех folds залогированная
+  validation AUC на 200-й итерации была выше финальной 500-й; отдельный trial с
+  early stopping выглядит следующим естественным вопросом.
 - Высокий gain importance агрегированных pressure-фич не означал полезность:
   они перехватывали splits, но ухудшали обобщение. Submission для `trial-015` и
   `trial-016` не создавались.
@@ -141,8 +153,9 @@
 - Основной скрипт активной серии: `src/cv_lightgbm.py`.
 - Данные: `data/train.csv`, `data/test.csv`, `data/sample_submission.csv`.
 - Исторический development holdout: 20%, stratified, seed 42.
-- Быстрые trial: LightGBM/500; `exp-002`: до 8000 деревьев с early stopping,
-  5-fold StratifiedKFold, shuffle, seed 2026.
+- Активный контроль trial: LightGBM/500 с numeric exact-value categories;
+  `exp-002`: до 8000 деревьев с early stopping. Оба используют 5-fold
+  StratifiedKFold, shuffle, seed 2026.
 - Основная метрика: ROC AUC.
 - Все скрипты пишут этапы, прогресс итераций, ETA и метрики в консоль и в
   `artifacts/logs/`; частота задаётся CLI-параметрами логирования.
@@ -155,5 +168,5 @@
 ## Следующее действие
 
 Загрузить `submission.csv` на Kaggle и записать score. Не запускать
-`trial-019` без обсуждения следующей гипотезы. Submission для новых trial
+`trial-020` без обсуждения следующей гипотезы. Submission для новых trial
 создавать только по явной просьбе участника.
