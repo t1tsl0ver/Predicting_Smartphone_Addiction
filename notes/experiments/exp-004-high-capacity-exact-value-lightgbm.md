@@ -1,6 +1,6 @@
 # exp-004 — High-capacity LightGBM with exact-value categories
 
-- Статус: **completed locally; Kaggle score pending**
+- Статус: **completed**
 - Дата: 2026-08-15
 - Контроли: `exp-002` и `exp-003`
 - Модель: конфигурация `exp-002` с exact-value encoding из `exp-003`
@@ -100,7 +100,7 @@ prediction=mean fold percentile ranks
 min=0.000009449818
 max=0.999910901715
 sha256=aea339f6fb0f04e40ee35f79c6ec98218fdc6c9108aab13f83e409d15eff3c5a
-Kaggle score=pending
+Kaggle score=0.96668
 ```
 
 Колонки равны `id, addicted_label`, ID полностью совпадают с
@@ -113,4 +113,5 @@ Kaggle score=pending
 конфигурацию `exp-002`, но механическое объединение не превзошло `exp-003`.
 `exp-003` остаётся принятым локальным и leaderboard-лидером. `exp-004` полезен
 как отрицательный результат и потенциально как отдельный участник ансамбля, но
-его одиночный submission локально слабее текущего лидера.
+его одиночный submission локально слабее текущего лидера. Kaggle подтвердил
+направление: `0.96668`, на `-0.00013` ниже `exp-003` (`0.96681`).
