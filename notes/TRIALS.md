@@ -23,7 +23,8 @@
 | [`trial-019`](trials/trial-019-numeric-exact-categories.md) | Добавлены categorical-копии точных числовых значений | **0.964025** OOF | **+0.001782** | accepted; won 5/5, paired CI above zero |
 | [`trial-020`](trials/trial-020-cat-smooth-20.md) | LightGBM `cat_smooth`: 10 → 20 | **0.963977** OOF | **-0.000048** | rejected; won 3/5, paired CI crosses zero |
 | [`trial-021`](trials/trial-021-250-trees.md) | Exact-value LightGBM: 500 → 250 деревьев | **0.964279** OOF | **+0.000254** | accepted; won 5/5, paired CI above zero |
+| [`trial-022`](trials/trial-022-catboost-lightgbm-200-head-to-head.md) | Standalone CatBoost против LightGBM при одинаковых 200 деревьях | **0.965049** CatBoost OOF | **+0.000756** к LGBM/200 | accepted; CatBoost won 5/5, paired CI above zero |
 
-Следующий ID: `trial-022`. Активная линия разработки использует чистый LightGBM
-на 250 деревьев с 5-fold CV; CatBoost и ансамбль остаются только историческими
-результатами `exp-001`.
+Следующий ID: `trial-023`. Быстрый LightGBM-контроль использует 250 деревьев;
+CatBoost/200 принят как более сильная самостоятельная модель для содержательных
+head-to-head trial. Обе линии используют 5-fold CV и exact-value categories.
