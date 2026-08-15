@@ -6,8 +6,8 @@
 
 ## Текущий результат
 
-Новый итоговый эксперимент —
-[`exp-003`](notes/experiments/exp-003-exact-value-lightgbm.md):
+Новый локальный итоговый эксперимент —
+[`exp-005`](notes/experiments/exp-005-exp003-exp002-rank-blend.md):
 
 | Версия | Локальная проверка | Kaggle leaderboard |
 |---|---:|---:|
@@ -16,6 +16,7 @@
 | `exp-002`: 5-fold high-budget LightGBM | **OOF 0.964047** | pending |
 | `exp-003`: exact-value LightGBM, LR 0.01 | **OOF 0.965044** | **0.96681** |
 | `exp-004`: high-capacity exact-value LightGBM | **OOF 0.964587** | **0.96668** |
+| `exp-005`: 60/40 rank blend `exp-003` + `exp-002` | **OOF 0.966874** | pending |
 
 `exp-003` использует принятые feature-engineering улучшения и categorical-копии
 точных числовых значений. Меньший learning rate и fold early stopping дали
@@ -24,7 +25,9 @@
 
 `exp-004` перенёс exact-value encoding в более ёмкую конфигурацию `exp-002`.
 Она улучшила `exp-002`, но проиграла `exp-003` на всех 5 folds, поэтому локальным
-лидером остаётся `exp-003`.
+лидером среди одиночных моделей остаётся `exp-003`. `exp-005` смешал ranks
+`exp-003` и `exp-002` в пропорции 60/40 и стал новым общим локальным лидером с
+OOF `0.966874`.
 
 Активная линия дальнейших trial использует чистый LightGBM на 250 деревьев с
 5-fold CV. `trial-019` добавил categorical-копии точных числовых значений и
@@ -44,6 +47,7 @@ notes/                   контекст проекта и правила эк�
 notes/experiments/       отдельная карточка каждого эксперимента
 src/train.py             валидация, обучение и создание submission
 src/cv_lightgbm.py       быстрые LGBM-only CV, OOF и optional submission
+src/blend_cv.py          проверенный OOF/test rank blend и submission
 src/compare_oof.py       paired bootstrap для сравнения двух OOF-наборов
 src/progress_logging.py  общие консольные и файловые логи прогресса
 tests/                   быстрые проверки инфраструктурного кода
