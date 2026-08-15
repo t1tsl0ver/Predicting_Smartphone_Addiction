@@ -124,9 +124,21 @@
   модель выиграла у `trial-014` на всех 5 folds.
 - Raw OOF `exp-002`: `0.9640427`; fold-rank OOF: `0.9640473`. Прирост к
   `trial-014` равен соответственно `+0.0017996` и `+0.0018020`.
-- Полный запуск занял `19:52`; актуальный результат записан в `submission.csv`,
-  SHA-256:
+- Полный запуск занял `19:52`; submission этого запуска имел SHA-256:
   `dceb10f2e580b545b860589121608bd4b55194df32a38f745a64fe82db170395`.
+  Kaggle score пока не сообщён.
+- Завершён `exp-003`: exact-value LightGBM с максимумом 3000 деревьев,
+  `learning_rate=0.01` и early stopping 400. Лучшие итерации folds: `2986`,
+  `2631`, `2298`, `2999`, `2482`.
+- Raw OOF `exp-003`: `0.9650351`; fold-rank OOF: `0.9650442`. Прирост к
+  `exp-002` равен соответственно `+0.0009924` и `+0.0009969`; новый exp выиграл
+  на всех 5 folds.
+- Paired bootstrap raw OOF delta против `exp-002` дал 95% interval
+  `[+0.0007320, +0.0011896]` и 300/300 положительных повторов. Интервал отражает
+  только row-sampling uncertainty.
+- `exp-003` стал новым локальным лидером. Полный запуск занял `21:03`; новый
+  `submission.csv` содержит fold-rank predictions, SHA-256:
+  `c4f72dd11b12d50833772da886986ba23516f3fee6471901ee59856bb271e960`.
   Kaggle score пока не сообщён.
 
 ## Зафиксированное соглашение
@@ -154,8 +166,8 @@
 - Данные: `data/train.csv`, `data/test.csv`, `data/sample_submission.csv`.
 - Исторический development holdout: 20%, stratified, seed 42.
 - Активный контроль trial: LightGBM/500 с numeric exact-value categories;
-  `exp-002`: до 8000 деревьев с early stopping. Оба используют 5-fold
-  StratifiedKFold, shuffle, seed 2026.
+  текущий итоговый лидер `exp-003`: до 3000 деревьев, LR 0.01 и early stopping.
+  Оба используют 5-fold StratifiedKFold, shuffle, seed 2026.
 - Основная метрика: ROC AUC.
 - Все скрипты пишут этапы, прогресс итераций, ETA и метрики в консоль и в
   `artifacts/logs/`; частота задаётся CLI-параметрами логирования.
@@ -167,6 +179,6 @@
 
 ## Следующее действие
 
-Загрузить `submission.csv` на Kaggle и записать score. Не запускать
+Загрузить `submission.csv` `exp-003` на Kaggle и записать score. Не запускать
 `trial-020` без обсуждения следующей гипотезы. Submission для новых trial
 создавать только по явной просьбе участника.

@@ -7,17 +7,19 @@
 ## Текущий результат
 
 Новый локальный итоговый эксперимент —
-[`exp-002`](notes/experiments/exp-002-max-lightgbm.md); его Kaggle score ожидается:
+[`exp-003`](notes/experiments/exp-003-exact-value-lightgbm.md); его Kaggle score ожидается:
 
 | Версия | Локальная проверка | Kaggle leaderboard |
 |---|---:|---:|
 | `exp-000`: CatBoost d7/400 | holdout 0.955008 | 0.95663 |
 | `exp-001`: 3-fold rank ensemble | **OOF 0.963154** | **0.96466** |
 | `exp-002`: 5-fold high-budget LightGBM | **OOF 0.964047** | pending |
+| `exp-003`: exact-value LightGBM, LR 0.01 | **OOF 0.965044** | pending |
 
-`exp-002` использует только LightGBM и принятые feature-engineering улучшения;
-увеличенный бюджет дал `+0.001802` OOF к быстрому `trial-014`. История маленьких
-проверок находится в [`notes/TRIALS.md`](notes/TRIALS.md).
+`exp-003` использует принятые feature-engineering улучшения и categorical-копии
+точных числовых значений. Меньший learning rate и fold early stopping дали
+`+0.000997` OOF к `exp-002`. История маленьких проверок находится в
+[`notes/TRIALS.md`](notes/TRIALS.md).
 
 Активная линия дальнейших trial использует чистый LightGBM на 500 деревьев с
 5-fold CV. `trial-019` добавил categorical-копии точных числовых значений и
