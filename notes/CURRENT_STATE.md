@@ -163,6 +163,13 @@
   активным контролем остаётся `trial-019`; submission не создавался.
 - В `src/cv_lightgbm.py` добавлен воспроизводимый параметр `--cat-smooth`,
   который логируется и сохраняется в метриках.
+- `trial-021` изолированно сократил exact-value LightGBM с 500 до 250 деревьев.
+  Raw OOF вырос до `0.9642792` (`+0.0002542` к `trial-019`), fold-rank OOF — до
+  `0.9642795`; изменение выиграло все 5 folds.
+- Mean train AUC снизился с `0.99459` до `0.98517`, а train–validation gap —
+  примерно с `0.03057` до `0.02089`. Paired bootstrap raw delta дал 95%
+  interval `[+0.0001639, +0.0003373]` и 300/300 положительных повторов.
+- `trial-021` принят как новый быстрый контроль. Submission не создавался.
 
 ## Зафиксированное соглашение
 
@@ -188,7 +195,7 @@
 - Основной скрипт активной серии: `src/cv_lightgbm.py`.
 - Данные: `data/train.csv`, `data/test.csv`, `data/sample_submission.csv`.
 - Исторический development holdout: 20%, stratified, seed 42.
-- Активный контроль trial: LightGBM/500 с numeric exact-value categories;
+- Активный контроль trial: LightGBM/250 с numeric exact-value categories;
   текущий итоговый лидер `exp-003`: до 3000 деревьев, LR 0.01 и early stopping.
   Оба используют 5-fold StratifiedKFold, shuffle, seed 2026.
 - Основная метрика: ROC AUC.
@@ -202,6 +209,7 @@
 
 ## Следующее действие
 
-Разобрать варианты cross-validation без увеличения числа folds и согласовать
-гипотезу `trial-021`. Принятым локальным лидером остаётся `exp-003`; submission
-для следующих trial создавать только по явной просьбе участника.
+Обсудить гипотезу `trial-022`; отдельный очевидный кандидат — проверить 200
+деревьев, которые были лучше 250 на live validation в 4/5 folds. Принятым
+локальным лидером остаётся `exp-003`; submission для следующих trial создавать
+только по явной просьбе участника.
