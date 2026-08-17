@@ -1,6 +1,6 @@
 # Current state
 
-Последнее обновление: 2026-08-15.
+Последнее обновление: 2026-08-17.
 
 ## Цель проекта
 
@@ -194,6 +194,19 @@
   SHA-256:
   `546dddd18ae79e7220266e07801c042aaba6faf37ef57dc42f6f46d183e6ce32`.
   Kaggle score: `0.96827`, на `+0.00146` выше `exp-003` (`0.96681`).
+- Завершён `trial-023`: на одинаковом быстром 2-fold CV проверены fixed 60/40
+  exact/base rank blends внутри CatBoost и LightGBM при параметрах `trial-022`.
+- LightGBM blend повысил fold-rank OOF с `0.9628257` до `0.9645387`
+  (`+0.0017130`) и выиграл на обоих folds. CatBoost blend снизил OOF с
+  `0.9645159` до `0.9626206` (`-0.0018952`) и проиграл на обоих folds.
+- Base CatBoost слишком слаб для веса 40%: его OOF `0.9510225` против
+  `0.9594472` у base LightGBM. Post-hoc CatBoost 95/5 дал лишь `+0.0000176` к
+  exact; bootstrap interval пересёк ноль, поэтому улучшение не принято.
+- Cross-fold LightGBM blend и post-hoc CatBoost 95/5 практически равны; paired
+  interval их разницы пересекает ноль. Submission не создавался.
+- Полный `trial-023` занял `10:43`; два exact CatBoost fit — около `7:29`.
+  Принято использовать 2-fold CV для быстрых следующих trial и подтверждать
+  только перспективного кандидата на 5 folds перед финальной версией.
 
 ## Зафиксированное соглашение
 
@@ -216,15 +229,19 @@
 - Основная ветка: `main`.
 - Python: 3.12.10.
 - Локальная среда: `.venv`.
-- Основной скрипт активной серии: `src/cv_lightgbm.py`.
+- Скрипты активной серии: `src/cv_family_blends.py`, `src/cv_head_to_head.py`
+  и `src/cv_lightgbm.py`.
 - Общий CatBoost/LightGBM runner: `src/cv_head_to_head.py`.
 - Данные: `data/train.csv`, `data/test.csv`, `data/sample_submission.csv`.
 - Исторический development holdout: 20%, stratified, seed 42.
-- Быстрый контроль trial: LightGBM/250 с numeric exact-value categories;
-  CatBoost/200 принят для содержательных head-to-head trial. По OOF он
-  практически равен текущему лучшему одиночному `exp-003`; текущий общий
-  локальный лидер — rank blend `exp-005`. Модели используют 5-fold
-  StratifiedKFold, shuffle, seed 2026.
+- Быстрый протокол trial: 2-fold StratifiedKFold, shuffle, seed 2026. Перед
+  финальной версией перспективный кандидат подтверждается на 5 folds.
+- Быстрый LightGBM-контроль: exact/base rank blend 60/40, по 200 деревьев.
+  Быстрый CatBoost-контроль: самостоятельный exact-value CatBoost/200;
+  base-компонент с весом 40% отклонён в `trial-023`.
+- По 5-fold OOF из `trial-022` exact CatBoost/200 практически равен текущему
+  лучшему одиночному `exp-003`; текущий общий локальный лидер — rank blend
+  `exp-005`.
 - Основная метрика: ROC AUC.
 - Все скрипты пишут этапы, прогресс итераций, ETA и метрики в консоль и в
   `artifacts/logs/`; частота задаётся CLI-параметрами логирования.
@@ -236,6 +253,7 @@
 
 ## Следующее действие
 
-Обсудить содержательную гипотезу для `trial-023`, используя принятую
-CatBoost/200 линию и при необходимости быстрый LightGBM-контроль. Submission
-для следующих trial создавать только по явной просьбе участника.
+Обсудить содержательную гипотезу для `trial-024`. Использовать быстрый 2-fold
+протокол и exact CatBoost/200 как CatBoost-контроль; LightGBM family blend можно
+использовать как отдельный быстрый контроль. Submission для следующих trial
+создавать только по явной просьбе участника.

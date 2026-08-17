@@ -24,7 +24,9 @@
 | [`trial-020`](trials/trial-020-cat-smooth-20.md) | LightGBM `cat_smooth`: 10 → 20 | **0.963977** OOF | **-0.000048** | rejected; won 3/5, paired CI crosses zero |
 | [`trial-021`](trials/trial-021-250-trees.md) | Exact-value LightGBM: 500 → 250 деревьев | **0.964279** OOF | **+0.000254** | accepted; won 5/5, paired CI above zero |
 | [`trial-022`](trials/trial-022-catboost-lightgbm-200-head-to-head.md) | Standalone CatBoost против LightGBM при одинаковых 200 деревьях | **0.965049** CatBoost OOF | **+0.000756** к LGBM/200 | accepted; CatBoost won 5/5, paired CI above zero |
+| [`trial-023`](trials/trial-023-two-fold-family-blends.md) | 2-fold exact/base rank blends внутри CatBoost и LightGBM | **0.964539** LGBM blend OOF | **+0.001713** к LGBM exact; Cat blend -0.001895 | LGBM blend signal accepted; CatBoost 60/40 rejected |
 
-Следующий ID: `trial-023`. Быстрый LightGBM-контроль использует 250 деревьев;
-CatBoost/200 принят как более сильная самостоятельная модель для содержательных
-head-to-head trial. Обе линии используют 5-fold CV и exact-value categories.
+Следующий ID: `trial-024`. Быстрые trial используют 2-fold CV; кандидат перед
+финальной версией подтверждается на 5 folds. LightGBM-контроль использует 200
+деревьев и exact/base rank blend 60/40, CatBoost-контроль — самостоятельный
+exact-value CatBoost/200 без обязательного base-компонента.

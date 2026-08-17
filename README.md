@@ -29,14 +29,20 @@
 `exp-003` и `exp-002` в пропорции 60/40 и стал новым общим локальным лидером с
 OOF `0.966874` и новым leaderboard-лидером со score `0.96827`.
 
-Активная линия дальнейших trial использует чистый LightGBM на 250 деревьев с
-5-fold CV. `trial-019` добавил categorical-копии точных числовых значений и
+Серия `trial-008`–`trial-021` использовала чистый LightGBM с 5-fold CV.
+`trial-019` добавил categorical-копии точных числовых значений и
 повысил OOF до `0.964025` (`+0.001782` к `trial-014`), выиграв 5/5 folds.
 `trial-020` усилил categorical smoothing, но немного снизил OOF до `0.963977`,
 а `trial-021` сократил бюджет до 250 деревьев и повысил OOF до `0.964279`,
 выиграв 5/5 folds. Активным контролем стал `trial-021`.
-CatBoost-ансамбль сохранён как исторический `exp-001`, но в новых trial не
-обучается.
+До `trial-022` CatBoost-ансамбль сохранялся только как исторический `exp-001`.
+
+`trial-022` вернул CatBoost в активную линию: при одинаковых 200 деревьях он
+выиграл у LightGBM на всех 5 folds (`0.965049` против `0.964293`). В
+`trial-023` на быстром 2-fold протоколе exact/base 60/40 blend заметно помог
+LightGBM (`+0.001713`), но навредил CatBoost (`-0.001895`), потому что CatBoost
+без exact-категорий оказался слишком слабым. Следующие trial используют 2 folds;
+перспективный кандидат перед финальной версией подтверждается на 5 folds.
 
 ## Структура репозитория
 
@@ -47,6 +53,7 @@ notes/                   контекст проекта и правила эк�
 notes/experiments/       отдельная карточка каждого эксперимента
 src/train.py             валидация, обучение и создание submission
 src/cv_lightgbm.py       быстрые LGBM-only CV, OOF и optional submission
+src/cv_family_blends.py  2-fold exact/base blends CatBoost и LightGBM
 src/blend_cv.py          проверенный OOF/test rank blend и submission
 src/compare_oof.py       paired bootstrap для сравнения двух OOF-наборов
 src/progress_logging.py  общие консольные и файловые логи прогресса
