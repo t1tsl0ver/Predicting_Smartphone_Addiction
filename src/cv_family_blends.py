@@ -28,9 +28,16 @@ from progress_logging import (
     RunLogger,
     format_duration,
 )
-
-
-DEFAULT_EXACT_WEIGHT = 0.60
+from trial_config import (
+    TRIAL_CATBOOST_DEPTH,
+    TRIAL_CATBOOST_L2_LEAF_REG,
+    TRIAL_CATBOOST_LEARNING_RATE,
+    TRIAL_EXACT_WEIGHT,
+    TRIAL_FOLDS,
+    TRIAL_ITERATIONS,
+    TRIAL_LIGHTGBM_LEARNING_RATE,
+    TRIAL_SEED,
+)
 
 
 def parse_args() -> argparse.Namespace:
@@ -41,14 +48,26 @@ def parse_args() -> argparse.Namespace:
         )
     )
     parser.add_argument("--train", type=Path, default=Path("data/train.csv"))
-    parser.add_argument("--folds", type=int, default=2)
-    parser.add_argument("--seed", type=int, default=2026)
-    parser.add_argument("--iterations", type=int, default=200)
-    parser.add_argument("--lightgbm-learning-rate", type=float, default=0.10)
-    parser.add_argument("--catboost-learning-rate", type=float, default=0.08)
-    parser.add_argument("--catboost-depth", type=int, default=8)
-    parser.add_argument("--catboost-l2-leaf-reg", type=float, default=5.0)
-    parser.add_argument("--exact-weight", type=float, default=DEFAULT_EXACT_WEIGHT)
+    parser.add_argument("--folds", type=int, default=TRIAL_FOLDS)
+    parser.add_argument("--seed", type=int, default=TRIAL_SEED)
+    parser.add_argument("--iterations", type=int, default=TRIAL_ITERATIONS)
+    parser.add_argument(
+        "--lightgbm-learning-rate",
+        type=float,
+        default=TRIAL_LIGHTGBM_LEARNING_RATE,
+    )
+    parser.add_argument(
+        "--catboost-learning-rate",
+        type=float,
+        default=TRIAL_CATBOOST_LEARNING_RATE,
+    )
+    parser.add_argument("--catboost-depth", type=int, default=TRIAL_CATBOOST_DEPTH)
+    parser.add_argument(
+        "--catboost-l2-leaf-reg",
+        type=float,
+        default=TRIAL_CATBOOST_L2_LEAF_REG,
+    )
+    parser.add_argument("--exact-weight", type=float, default=TRIAL_EXACT_WEIGHT)
     parser.add_argument("--bootstrap-repeats", type=int, default=100)
     parser.add_argument("--bootstrap-sample-size", type=int, default=DEFAULT_TEST_SIZE)
     parser.add_argument("--log-every", type=int, default=50)

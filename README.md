@@ -44,6 +44,13 @@ LightGBM (`+0.001713`), но навредил CatBoost (`-0.001895`), потом
 без exact-категорий оказался слишком слабым. Следующие trial используют 2 folds;
 перспективный кандидат перед финальной версией подтверждается на 5 folds.
 
+`trial-024` удалил наименее важную общую exact-фичу `gaming_hours_exact`.
+CatBoost улучшился на `+0.000073`, выиграл 2/2 folds и ускорился примерно на 8%;
+для его быстрой screening-линии ablation принята. У LightGBM blend дельта всего
+`+0.000018`, один fold отрицательный и bootstrap пересекает ноль, поэтому его
+feature set не меняется. Канонический быстрый конфиг, включая обязательные два
+folds, хранится в `src/trial_config.py`.
+
 ## Структура репозитория
 
 ```text
@@ -54,6 +61,8 @@ notes/experiments/       отдельная карточка каждого эк
 src/train.py             валидация, обучение и создание submission
 src/cv_lightgbm.py       быстрые LGBM-only CV, OOF и optional submission
 src/cv_family_blends.py  2-fold exact/base blends CatBoost и LightGBM
+src/cv_drop_exact_feature.py парная ablation exact-фичи против cached OOF
+src/trial_config.py      канонические параметры быстрых 2-fold trial
 src/blend_cv.py          проверенный OOF/test rank blend и submission
 src/compare_oof.py       paired bootstrap для сравнения двух OOF-наборов
 src/progress_logging.py  общие консольные и файловые логи прогресса

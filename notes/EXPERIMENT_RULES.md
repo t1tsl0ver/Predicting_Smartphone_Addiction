@@ -35,6 +35,8 @@
 - Карточка trial: `notes/trials/trial-NNN-short-name.md`.
 - Каждый завершённый trial получает отдельный Git-коммит с локальной метрикой и
   выводом `accepted` или `rejected`.
+- После успешного коммита завершённый trial сразу отправляется в `origin/main`,
+  если участник явно не попросил отложить push.
 - Полная версия решения: `exp-000`, `exp-001`, `exp-002`, …
 - Карточка exp: `notes/experiments/exp-NNN-short-name.md`.
 - Несколько принятых trial объединяются в следующий exp.
