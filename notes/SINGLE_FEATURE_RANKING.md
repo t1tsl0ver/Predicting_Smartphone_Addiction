@@ -1,0 +1,62 @@
+# Рейтинг одиночных feature-trial
+
+Серия `trial-025`–`trial-042` проверила 18 кандидатов строго по одному. Каждый
+кандидат получил отдельный trial и сравнивался с одним cached-контролем
+`trial-023`: LightGBM exact/base rank blend 60/40, 2-fold StratifiedKFold,
+seed 2026, по 200 деревьев в каждом компоненте.
+
+Контрольный OOF ROC AUC во всех строках — `0.964538668`. Ни один результат этой
+таблицы не включает другой новый кандидат, target encoding или post-hoc подбор
+веса. Поэтому дельты сопоставимы между собой, но это screening, а не финальное
+5-fold подтверждение и не прогноз Kaggle score.
+
+## Полный рейтинг
+
+| Место | Trial | Кандидат | OOF ROC AUC | Delta | Delta по folds | 95% paired interval | Решение |
+|---:|---|---|---:|---:|---:|---:|---|
+| 1 | [`trial-029`](trials/trial-029-work-study-screen-share.md) | `work_study_screen_share` | **0.964990698** | **+0.000452030** | +0.000508548 / +0.000395125 | [+0.000347156; +0.000553618] | **сильный screening-победитель** |
+| 2 | [`trial-028`](trials/trial-028-entertainment-screen-share.md) | `entertainment_screen_share` | **0.964657125** | **+0.000118457** | +0.000157617 / +0.000079385 | [+0.000040194; +0.000217493] | **принят для screening** |
+| 3 | [`trial-038`](trials/trial-038-notifications-value-frequency.md) | `notifications_per_day_value_frequency` | **0.964627846** | **+0.000089178** | +0.000110522 / +0.000068054 | [+0.000052989; +0.000136426] | **принят для screening** |
+| 4 | [`trial-033`](trials/trial-033-daily-screen-time-value-frequency.md) | `daily_screen_time_hours_value_frequency` | **0.964586346** | **+0.000047678** | +0.000093006 / +0.000002398 | [+0.000001572; +0.000096557] | **погранично принят** |
+| 5 | [`trial-039`](trials/trial-039-app-opens-value-frequency.md) | `app_opens_per_day_value_frequency` | 0.964568238 | +0.000029570 | +0.000060281 / -0.000000746 | [-0.000028717; +0.000090756] | не подтверждён |
+| 6 | [`trial-040`](trials/trial-040-weekend-value-frequency.md) | `weekend_screen_time_value_frequency` | 0.964567335 | +0.000028667 | +0.000065620 / -0.000007946 | [-0.000034460; +0.000085173] | не подтверждён |
+| 7 | [`trial-031`](trials/trial-031-missing-feature-count.md) | `missing_feature_count` | 0.964567105 | +0.000028438 | +0.000075657 / -0.000018578 | [-0.000010998; +0.000070065] | не подтверждён |
+| 8 | [`trial-036`](trials/trial-036-work-study-value-frequency.md) | `work_study_hours_value_frequency` | 0.964554436 | +0.000015768 | +0.000040290 / -0.000008559 | [-0.000037283; +0.000069479] | не подтверждён |
+| 9 | [`trial-025`](trials/trial-025-notifications-per-screen-hour.md) | `notifications_per_screen_hour` | 0.964550265 | +0.000011597 | -0.000028773 / +0.000052558 | [-0.000023508; +0.000060633] | не подтверждён |
+| 10 | [`trial-041`](trials/trial-041-missing-pattern-frequency.md) | `missing_pattern_frequency` | 0.964540442 | +0.000001774 | +0.000023387 / -0.000019856 | [-0.000031540; +0.000037043] | практически ноль |
+| 11 | [`trial-027`](trials/trial-027-app-opens-per-notification.md) | `app_opens_per_notification` | 0.964539290 | +0.000000622 | -0.000026707 / +0.000028238 | [-0.000036486; +0.000036721] | практически ноль |
+| 12 | [`trial-035`](trials/trial-035-gaming-value-frequency.md) | `gaming_hours_value_frequency` | 0.964526309 | -0.000012359 | +0.000009886 / -0.000033886 | [-0.000050047; +0.000038512] | отклонён |
+| 13 | [`trial-026`](trials/trial-026-app-opens-per-screen-hour.md) | `app_opens_per_screen_hour` | 0.964515324 | -0.000023344 | +0.000003465 / -0.000049972 | [-0.000075164; +0.000023008] | отклонён |
+| 14 | [`trial-032`](trials/trial-032-age-value-frequency.md) | `age_value_frequency` | 0.964513658 | -0.000025009 | +0.000019530 / -0.000069695 | [-0.000066317; +0.000017724] | отклонён |
+| 15 | [`trial-030`](trials/trial-030-weekend-minus-daily-screen.md) | `weekend_minus_daily_screen` | 0.964505477 | -0.000033191 | -0.000002212 / -0.000063830 | [-0.000092331; +0.000050714] | отклонён |
+| 16 | [`trial-037`](trials/trial-037-sleep-value-frequency.md) | `sleep_hours_value_frequency` | 0.964498104 | -0.000040564 | -0.000067314 / -0.000013647 | [-0.000072363; -0.000003923] | уверенно отклонён |
+| 17 | [`trial-034`](trials/trial-034-social-media-value-frequency.md) | `social_media_hours_value_frequency` | 0.964388288 | -0.000150380 | -0.000071805 / -0.000228916 | [-0.000218736; -0.000068055] | уверенно отклонён |
+| 18 | [`trial-042`](trials/trial-042-missing-pattern-category.md) | `missing_pattern_category` | 0.964150414 | -0.000388254 | -0.000325667 / -0.000450672 | [-0.000484557; -0.000290779] | уверенно отклонён |
+
+Формальный screening-критерий требовал одновременно положительную общую дельту,
+победу на обоих folds и нижнюю границу paired row-bootstrap выше нуля. Его
+прошли только первые четыре кандидата. Bootstrap здесь оценивает неопределённость
+от повторной выборки строк, но не учитывает переобучение модели и смену folds.
+
+## Откуда пришёл прирост лидеров
+
+| Кандидат | Delta exact-компонента | Delta base-компонента | Что видно |
+|---|---:|---:|---|
+| `work_study_screen_share` | **+0.000805890** | -0.000006513 | почти весь прирост из exact-модели |
+| `entertainment_screen_share` | **+0.000169041** | -0.000150704 | exact выиграл, base частично съел прирост |
+| `notifications_per_day_value_frequency` | +0.000014237 | **+0.000937707** | почти весь прирост из base-модели |
+| `daily_screen_time_hours_value_frequency` | -0.000078581 | **+0.000247386** | слабый итог после конфликта компонентов |
+
+## Вывод серии
+
+- Сильнейший самостоятельный сигнал — доля work/study в общем экранном времени.
+  Его дельта почти в четыре раза больше второго места и положительна на обоих
+  folds с запасом.
+- Доля entertainment также устойчива, но заметно слабее лидера.
+- Из frequency-кандидатов уверенно сработала частота `notifications_per_day`;
+  частота daily screen time прошла критерий буквально у границы.
+- Простые action-intensity ratios не дали самостоятельного прироста.
+- Полная структура пропусков бесполезна как frequency и особенно вредна как
+  categorical-фича; только число пропусков дало слабый, неподтверждённый плюс.
+- Серия на этом остановлена. Комбинации и target encoding не запускались; выбор
+  следующего состава остаётся за участником.

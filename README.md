@@ -116,7 +116,15 @@ folds разошлись по знаку, оба компонента ухудш
 
 `trial-042` проверил саму missing-mask как categorical-фичу и резко проиграл:
 blend `-0.000388`, 2/2 отрицательных folds, paired interval ниже нуля. Это
-завершило одиночную feature-серию; следующий шаг — рейтинг, не комбинация.
+завершило одиночную feature-серию.
+
+Итоговый [рейтинг 18 одиночных кандидатов](notes/SINGLE_FEATURE_RANKING.md)
+возглавили `work_study_screen_share` (`+0.000452`),
+`entertainment_screen_share` (`+0.000118`) и
+`notifications_per_day_value_frequency` (`+0.000089`). Погранично прошла
+`daily_screen_time_hours_value_frequency` (`+0.000048`). Только эти четыре
+фичи выполнили все screening-критерии; комбинации и target encoding пока не
+запускались.
 
 ## Структура репозитория
 
