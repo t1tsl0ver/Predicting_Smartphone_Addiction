@@ -160,6 +160,7 @@ src/cv_lightgbm.py       быстрые LGBM-only CV, OOF и optional submission
 src/cv_family_blends.py  2-fold exact/base blends CatBoost и LightGBM
 src/cv_drop_exact_feature.py парная ablation exact-фичи против cached OOF
 src/cv_feature_trial.py  LightGBM feature/bundle trial против cached blend
+src/cv_target_encoded_blend.py полный 5-fold exact/base blend с leak-safe TE
 src/trial_config.py      канонические параметры быстрых 2-fold trial
 src/blend_cv.py          проверенный OOF/test rank blend и submission
 src/compare_oof.py       paired bootstrap для сравнения двух OOF-наборов
