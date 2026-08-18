@@ -303,6 +303,10 @@
 - Завершён `trial-035`: `gaming_hours_value_frequency` дал blend delta
   `-0.0000124`, mixed folds и paired interval `[-0.0000500, +0.0000385]`.
   Exact/base также ухудшились; кандидат отклонён.
+- Завершён `trial-036`: `work_study_hours_value_frequency` дал blend delta
+  `+0.0000158`, но folds разошлись по знаку, paired interval
+  `[-0.0000373, +0.0000695]` пересёк ноль. Кандидат отклонён; сильным остаётся
+  отдельный share-сигнал `trial-029`, а не frequency.
 
 ## Зафиксированное соглашение
 
@@ -354,7 +358,7 @@
 
 ## Следующее действие
 
-Провести `trial-036` для fold-safe `work_study_hours_value_frequency` на
+Провести `trial-037` для fold-safe `sleep_hours_value_frequency` на
 том же cached LightGBM exact/base 60/40 контроле. Остальные кандидаты проверять
 строго по одному; после окончания одиночной серии составить рейтинг и
 остановиться до решения участника о комбинациях. Target encoding пока не
