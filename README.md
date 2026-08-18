@@ -51,6 +51,12 @@ CatBoost улучшился на `+0.000073`, выиграл 2/2 folds и уск
 feature set не меняется. Канонический быстрый конфиг, включая обязательные два
 folds, хранится в `src/trial_config.py`.
 
+`trial-025` начал серию строго одиночных LightGBM feature-проверок. Фича
+`notifications_per_screen_hour` дала только `+0.000012` к exact/base blend,
+проиграла на одном из двух folds, а paired interval пересёк ноль; кандидат
+отклонён. Для серии добавлен общий `src/cv_feature_trial.py`. Комбинации и target
+encoding не запускаются до завершения и ранжирования одиночных кандидатов.
+
 ## Структура репозитория
 
 ```text
@@ -62,6 +68,7 @@ src/train.py             валидация, обучение и создани�
 src/cv_lightgbm.py       быстрые LGBM-only CV, OOF и optional submission
 src/cv_family_blends.py  2-fold exact/base blends CatBoost и LightGBM
 src/cv_drop_exact_feature.py парная ablation exact-фичи против cached OOF
+src/cv_feature_trial.py  одиночные LightGBM feature-trial против cached blend
 src/trial_config.py      канонические параметры быстрых 2-fold trial
 src/blend_cv.py          проверенный OOF/test rank blend и submission
 src/compare_oof.py       paired bootstrap для сравнения двух OOF-наборов
