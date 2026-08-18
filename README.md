@@ -98,6 +98,9 @@ folds разошлись по знаку, оба компонента ухудш
 `trial-036` проверил frequency work/study hours: `+0.000016`, mixed folds и
 интервал через ноль; кандидат отклонён.
 
+`trial-037` проверил frequency sleep hours и был устойчиво отклонён: blend
+`-0.000041`, 2/2 проигранных folds, paired interval ниже нуля.
+
 ## Структура репозитория
 
 ```text
