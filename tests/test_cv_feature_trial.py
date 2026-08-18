@@ -14,12 +14,15 @@ from cv_feature_trial import (  # noqa: E402
     APP_OPENS_PER_SCREEN_HOUR,
     ENTERTAINMENT_SCREEN_SHARE,
     MISSING_FEATURE_COUNT,
+    MISSING_PATTERN_CATEGORY,
+    MISSING_PATTERN_FREQUENCY,
     NOTIFICATIONS_PER_SCREEN_HOUR,
     OPENS_PER_NOTIFICATION,
     WEEKEND_MINUS_DAILY_SCREEN,
     WORK_STUDY_SCREEN_SHARE,
     add_candidate_feature,
     fold_frequency_values,
+    missing_pattern_keys,
     normalized_value_frequency,
     safe_ratio,
 )
@@ -110,6 +113,33 @@ class FeatureTrialTests(unittest.TestCase):
             frame["daily_screen_time_hours_value_frequency"],
             [1 / 3, 1 / 3, 1 / 3],
         )
+
+    def test_missing_pattern_uses_stable_bit_positions(self) -> None:
+        frame = pd.DataFrame(
+            {
+                "first": [1.0, np.nan, np.nan],
+                "second": [1.0, 1.0, np.nan],
+                "third": [np.nan, 1.0, np.nan],
+            }
+        )
+
+        result = missing_pattern_keys(frame, ("first", "second", "third"))
+
+        self.assertEqual(result.tolist(), [4, 1, 7])
+
+    def test_missing_pattern_candidates_are_separate_features(self) -> None:
+        frame = example_frame()
+        feature_columns = tuple(
+            column for column in frame if column not in ("id", "addicted_label")
+        )
+        pattern = missing_pattern_keys(frame, feature_columns)
+
+        frequency = normalized_value_frequency(pattern)
+        category = pattern.astype("string")
+
+        self.assertEqual(len(frequency), len(frame))
+        self.assertEqual(str(category.dtype), "string")
+        self.assertNotEqual(MISSING_PATTERN_FREQUENCY, MISSING_PATTERN_CATEGORY)
 
 
 if __name__ == "__main__":

@@ -41,7 +41,16 @@ ENTERTAINMENT_SCREEN_SHARE = "entertainment_screen_share"
 WORK_STUDY_SCREEN_SHARE = "work_study_screen_share"
 WEEKEND_MINUS_DAILY_SCREEN = "weekend_minus_daily_screen"
 MISSING_FEATURE_COUNT = "missing_feature_count"
+MISSING_PATTERN_FREQUENCY = "missing_pattern_frequency"
+MISSING_PATTERN_CATEGORY = "missing_pattern_category"
 FREQUENCY_SUFFIX = "_value_frequency"
+
+ORIGINAL_PREDICTORS = (
+    *RAW_NUMERIC_FEATURES,
+    "gender",
+    "stress_level",
+    "academic_work_impact",
+)
 
 FREQUENCY_CANDIDATES = {
     f"{source}{FREQUENCY_SUFFIX}": source for source in RAW_NUMERIC_FEATURES
@@ -55,6 +64,8 @@ CANDIDATE_NAMES = {
     WORK_STUDY_SCREEN_SHARE,
     WEEKEND_MINUS_DAILY_SCREEN,
     MISSING_FEATURE_COUNT,
+    MISSING_PATTERN_FREQUENCY,
+    MISSING_PATTERN_CATEGORY,
     *FREQUENCY_CANDIDATES,
 }
 
@@ -101,6 +112,17 @@ def normalized_value_frequency(source: pd.Series) -> pd.Series:
     keys = source.astype("string").fillna("__MISSING__")
     frequencies = keys.value_counts(dropna=False) / len(keys)
     return keys.map(frequencies).astype(float)
+
+
+def missing_pattern_keys(
+    frame: pd.DataFrame,
+    feature_columns: tuple[str, ...] = ORIGINAL_PREDICTORS,
+) -> pd.Series:
+    missing = [column for column in feature_columns if column not in frame]
+    if missing:
+        raise ValueError(f"Cannot build missing pattern; missing columns: {missing}")
+    powers = 1 << np.arange(len(feature_columns), dtype=np.uint16)
+    return frame[list(feature_columns)].isna().astype(np.uint16).dot(powers)
 
 
 def fold_frequency_values(
@@ -150,6 +172,10 @@ def add_candidate_feature(frame: pd.DataFrame, candidate: str) -> str:
         )
     elif candidate == MISSING_FEATURE_COUNT:
         frame[candidate] = frame[original_features].isna().sum(axis=1).astype(np.int8)
+    elif candidate == MISSING_PATTERN_FREQUENCY:
+        frame[candidate] = normalized_value_frequency(missing_pattern_keys(frame))
+    elif candidate == MISSING_PATTERN_CATEGORY:
+        frame[candidate] = missing_pattern_keys(frame).astype("string")
     elif candidate in FREQUENCY_CANDIDATES:
         source = FREQUENCY_CANDIDATES[candidate]
         frame[candidate] = normalized_value_frequency(frame[source])
@@ -273,6 +299,10 @@ def main() -> None:
                 train[FREQUENCY_CANDIDATES[args.candidate]],
                 train_indices,
                 valid_indices,
+            )
+        elif args.candidate == MISSING_PATTERN_FREQUENCY:
+            fold_frequency = fold_frequency_values(
+                missing_pattern_keys(train), train_indices, valid_indices
             )
         for variant, (features, categorical, _) in variants.items():
             x_train = features.iloc[train_indices]
@@ -406,6 +436,7 @@ def main() -> None:
             "frequency_encoding_scope": (
                 "fold-train mapping; unseen validation values map to zero"
                 if args.candidate in FREQUENCY_CANDIDATES
+                or args.candidate == MISSING_PATTERN_FREQUENCY
                 else None
             ),
         },
