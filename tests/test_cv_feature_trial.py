@@ -18,9 +18,12 @@ from cv_feature_trial import (  # noqa: E402
     MISSING_PATTERN_FREQUENCY,
     NOTIFICATIONS_PER_SCREEN_HOUR,
     OPENS_PER_NOTIFICATION,
+    SCREENING_WINNER_FEATURES,
+    SCREENING_WINNERS_BUNDLE,
     WEEKEND_MINUS_DAILY_SCREEN,
     WORK_STUDY_SCREEN_SHARE,
     add_candidate_feature,
+    add_candidate_features,
     fold_frequency_values,
     format_candidate_distribution,
     missing_pattern_keys,
@@ -87,6 +90,15 @@ class FeatureTrialTests(unittest.TestCase):
             add_candidate_feature(frame, NOTIFICATIONS_PER_SCREEN_HOUR)
         with self.assertRaisesRegex(ValueError, "Unknown candidate"):
             add_candidate_feature(example_frame(), "unknown")
+
+    def test_builds_the_four_screening_winners_as_one_named_bundle(self) -> None:
+        frame = example_frame()
+
+        created = add_candidate_features(frame, SCREENING_WINNERS_BUNDLE)
+
+        self.assertEqual(created, SCREENING_WINNER_FEATURES)
+        self.assertTrue(all(feature in frame for feature in created))
+        self.assertEqual(len(created), 4)
 
     def test_normalized_frequency_includes_missing_as_a_value(self) -> None:
         result = normalized_value_frequency(pd.Series([1.0, 1.0, 2.0, np.nan]))

@@ -44,8 +44,9 @@
 | [`trial-040`](trials/trial-040-weekend-value-frequency.md) | Fold-safe frequency exact-значения weekend screen time | **0.964567** LGBM blend OOF | +0.000029 | rejected; one fold negative, interval crosses zero |
 | [`trial-041`](trials/trial-041-missing-pattern-frequency.md) | Fold-safe частота полной 12-битной маски пропусков | **0.964540** LGBM blend OOF | +0.000002 | rejected; effectively zero, mixed folds |
 | [`trial-042`](trials/trial-042-missing-pattern-category.md) | Полная 12-битная missing-mask как categorical-фича | **0.964150** LGBM blend OOF | -0.000388 | rejected; lost 2/2, interval negative |
+| [`trial-043`](trials/trial-043-combine-four-screening-winners.md) | Одновременно добавлены четыре победителя одиночной feature-серии | **0.965240** LGBM blend OOF | **+0.000701** | accepted screening; won 2/2, also beats best single |
 
-Следующий ID: `trial-043`. Канонические параметры быстрых trial хранятся в
+Следующий ID: `trial-044`. Канонические параметры быстрых trial хранятся в
 `src/trial_config.py` и включают 2-fold CV; кандидат перед финальной версией
 подтверждается на 5 folds. LightGBM-контроль использует 200 деревьев и exact/base
 rank blend 60/40 с полным exact-набором. CatBoost-контроль — самостоятельный
@@ -54,5 +55,6 @@ screening-линии и требует 5-fold подтверждения пер�
 
 Новая серия одиночных feature-trial использует тот же cached LightGBM exact/base
 60/40 контроль `trial-023`. Каждый кандидат проверяется отдельно; комбинации не
-запускаются до отдельного решения участника. После серии составляется рейтинг
-одиночных кандидатов.
+запускались до отдельного решения участника. После полного рейтинга `trial-043`
+объединил ровно четыре прошедших screening кандидата и получил `+0.000701` к
+контролю; target encoding пока не запускался.

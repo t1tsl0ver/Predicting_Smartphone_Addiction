@@ -44,6 +44,7 @@ MISSING_FEATURE_COUNT = "missing_feature_count"
 MISSING_PATTERN_FREQUENCY = "missing_pattern_frequency"
 MISSING_PATTERN_CATEGORY = "missing_pattern_category"
 FREQUENCY_SUFFIX = "_value_frequency"
+SCREENING_WINNERS_BUNDLE = "screening_winners_bundle"
 
 ORIGINAL_PREDICTORS = (
     *RAW_NUMERIC_FEATURES,
@@ -56,6 +57,13 @@ FREQUENCY_CANDIDATES = {
     f"{source}{FREQUENCY_SUFFIX}": source for source in RAW_NUMERIC_FEATURES
 }
 
+SCREENING_WINNER_FEATURES = (
+    WORK_STUDY_SCREEN_SHARE,
+    ENTERTAINMENT_SCREEN_SHARE,
+    "notifications_per_day_value_frequency",
+    "daily_screen_time_hours_value_frequency",
+)
+
 CANDIDATE_NAMES = {
     NOTIFICATIONS_PER_SCREEN_HOUR,
     APP_OPENS_PER_SCREEN_HOUR,
@@ -66,6 +74,7 @@ CANDIDATE_NAMES = {
     MISSING_FEATURE_COUNT,
     MISSING_PATTERN_FREQUENCY,
     MISSING_PATTERN_CATEGORY,
+    SCREENING_WINNERS_BUNDLE,
     *FREQUENCY_CANDIDATES,
 }
 
@@ -73,8 +82,9 @@ CANDIDATE_NAMES = {
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
-            "Evaluate one row-wise feature in the canonical LightGBM exact/base "
-            "blend against cached control OOF predictions."
+            "Evaluate one feature candidate or a named feature bundle in the "
+            "canonical LightGBM exact/base blend against cached control OOF "
+            "predictions."
         )
     )
     parser.add_argument("--train", type=Path, default=Path("data/train.csv"))
@@ -184,6 +194,15 @@ def add_candidate_feature(frame: pd.DataFrame, candidate: str) -> str:
     return candidate
 
 
+def add_candidate_features(frame: pd.DataFrame, candidate: str) -> tuple[str, ...]:
+    candidates = (
+        SCREENING_WINNER_FEATURES
+        if candidate == SCREENING_WINNERS_BUNDLE
+        else (candidate,)
+    )
+    return tuple(add_candidate_feature(frame, feature) for feature in candidates)
+
+
 def format_candidate_distribution(available: pd.Series) -> str:
     if available.empty:
         return "no non-missing values"
@@ -233,11 +252,15 @@ def main() -> None:
             args.exact_weight,
         )
 
-    with logger.step(f"Build candidate feature | {args.candidate}"):
-        candidate_feature = add_candidate_feature(train, args.candidate)
+    with logger.step(f"Build candidate feature set | {args.candidate}"):
+        candidate_features = add_candidate_features(train, args.candidate)
         exact_features, base_features = build_feature_variants(train)
-        if candidate_feature not in exact_features or candidate_feature not in base_features:
-            raise ValueError("Candidate must be present in both feature variants")
+        for candidate_feature in candidate_features:
+            if (
+                candidate_feature not in exact_features
+                or candidate_feature not in base_features
+            ):
+                raise ValueError("Candidates must be present in both feature variants")
         exact_categorical = train[exact_features].select_dtypes(
             include=["object", "string", "category"]
         ).columns.tolist()
@@ -251,16 +274,24 @@ def main() -> None:
         x_base = x_exact[base_features]
         y = train[TARGET]
 
-    available = train[candidate_feature].dropna()
-    logger.info(
-        f"Candidate | name={candidate_feature}, available={len(available)}, "
-        f"missing={train[candidate_feature].isna().mean():.2%}, "
-        f"unique={available.nunique()}"
-    )
-    if not available.empty:
+    candidate_distributions: dict[str, dict[str, float | int]] = {}
+    for candidate_feature in candidate_features:
+        available = train[candidate_feature].dropna()
         logger.info(
-            "Candidate distribution | " + format_candidate_distribution(available)
+            f"Candidate | name={candidate_feature}, available={len(available)}, "
+            f"missing={train[candidate_feature].isna().mean():.2%}, "
+            f"unique={available.nunique()}"
         )
+        if not available.empty:
+            logger.info(
+                "Candidate distribution | "
+                + format_candidate_distribution(available)
+            )
+        candidate_distributions[candidate_feature] = {
+            "available": int(available.size),
+            "missing_rate": float(train[candidate_feature].isna().mean()),
+            "unique_nonmissing": int(available.nunique()),
+        }
     logger.info(
         f"Configuration | folds={args.folds}, seed={args.seed}, "
         f"trees={args.iterations}, learning_rate={args.learning_rate}, "
@@ -304,25 +335,27 @@ def main() -> None:
             raise ValueError("Cached control fold assignment changed unexpectedly")
 
         durations: dict[str, float] = {}
-        fold_frequency: tuple[np.ndarray, np.ndarray] | None = None
-        if args.candidate in FREQUENCY_CANDIDATES:
-            fold_frequency = fold_frequency_values(
-                train[FREQUENCY_CANDIDATES[args.candidate]],
-                train_indices,
-                valid_indices,
-            )
-        elif args.candidate == MISSING_PATTERN_FREQUENCY:
-            fold_frequency = fold_frequency_values(
-                missing_pattern_keys(train), train_indices, valid_indices
-            )
+        fold_frequencies: dict[str, tuple[np.ndarray, np.ndarray]] = {}
+        for candidate_feature in candidate_features:
+            if candidate_feature in FREQUENCY_CANDIDATES:
+                fold_frequencies[candidate_feature] = fold_frequency_values(
+                    train[FREQUENCY_CANDIDATES[candidate_feature]],
+                    train_indices,
+                    valid_indices,
+                )
+            elif candidate_feature == MISSING_PATTERN_FREQUENCY:
+                fold_frequencies[candidate_feature] = fold_frequency_values(
+                    missing_pattern_keys(train), train_indices, valid_indices
+                )
         for variant, (features, categorical, _) in variants.items():
             x_train = features.iloc[train_indices]
             x_valid = features.iloc[valid_indices]
-            if fold_frequency is not None:
+            if fold_frequencies:
                 x_train = x_train.copy()
                 x_valid = x_valid.copy()
-                x_train[candidate_feature] = fold_frequency[0]
-                x_valid[candidate_feature] = fold_frequency[1]
+                for feature, (train_values, valid_values) in fold_frequencies.items():
+                    x_train[feature] = train_values
+                    x_valid[feature] = valid_values
             model = make_lightgbm(args.iterations, args.learning_rate, fold_seed)
             label = f"Fold {fold}/{args.folds} LightGBM candidate {variant}"
             started = time.perf_counter()
@@ -431,9 +464,14 @@ def main() -> None:
     interval_positive = float(bootstrap["ci95_lower"]) > 0
     metrics = {
         "run_id": args.run_id,
-        "comparison": "single_feature_lightgbm_family_blend",
+        "comparison": (
+            "feature_bundle_lightgbm_family_blend"
+            if len(candidate_features) > 1
+            else "single_feature_lightgbm_family_blend"
+        ),
         "control_run_id": control_metrics.get("run_id"),
-        "candidate_feature": candidate_feature,
+        "candidate_feature": args.candidate,
+        "candidate_features": list(candidate_features),
         "folds": args.folds,
         "seed": args.seed,
         "parameters": {
@@ -446,16 +484,15 @@ def main() -> None:
             "base_features": base_features,
             "frequency_encoding_scope": (
                 "fold-train mapping; unseen validation values map to zero"
-                if args.candidate in FREQUENCY_CANDIDATES
-                or args.candidate == MISSING_PATTERN_FREQUENCY
+                if any(
+                    feature in FREQUENCY_CANDIDATES
+                    or feature == MISSING_PATTERN_FREQUENCY
+                    for feature in candidate_features
+                )
                 else None
             ),
         },
-        "candidate_distribution": {
-            "available": int(available.size),
-            "missing_rate": float(train[candidate_feature].isna().mean()),
-            "unique_nonmissing": int(available.nunique()),
-        },
+        "candidate_distributions": candidate_distributions,
         "components": component_metrics,
         "blend": {
             "control_fold_rank_oof_auc": control_auc,
