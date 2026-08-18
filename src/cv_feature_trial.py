@@ -184,6 +184,18 @@ def add_candidate_feature(frame: pd.DataFrame, candidate: str) -> str:
     return candidate
 
 
+def format_candidate_distribution(available: pd.Series) -> str:
+    if available.empty:
+        return "no non-missing values"
+    if pd.api.types.is_numeric_dtype(available):
+        return (
+            f"min={available.min():.8f}, median={available.median():.8f}, "
+            f"max={available.max():.8f}"
+        )
+    top = available.astype(str).value_counts().head(3)
+    return "top=" + ", ".join(f"{value}:{count}" for value, count in top.items())
+
+
 def validate_args(args: argparse.Namespace) -> None:
     if args.folds < 2:
         raise ValueError("--folds must be at least 2")
@@ -247,8 +259,7 @@ def main() -> None:
     )
     if not available.empty:
         logger.info(
-            f"Candidate distribution | min={available.min():.8f}, "
-            f"median={available.median():.8f}, max={available.max():.8f}"
+            "Candidate distribution | " + format_candidate_distribution(available)
         )
     logger.info(
         f"Configuration | folds={args.folds}, seed={args.seed}, "

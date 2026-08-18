@@ -22,6 +22,7 @@ from cv_feature_trial import (  # noqa: E402
     WORK_STUDY_SCREEN_SHARE,
     add_candidate_feature,
     fold_frequency_values,
+    format_candidate_distribution,
     missing_pattern_keys,
     normalized_value_frequency,
     safe_ratio,
@@ -140,6 +141,15 @@ class FeatureTrialTests(unittest.TestCase):
         self.assertEqual(len(frequency), len(frame))
         self.assertEqual(str(category.dtype), "string")
         self.assertNotEqual(MISSING_PATTERN_FREQUENCY, MISSING_PATTERN_CATEGORY)
+
+    def test_formats_numeric_and_categorical_candidate_distributions(self) -> None:
+        numeric = format_candidate_distribution(pd.Series([1.0, 2.0, 3.0]))
+        categorical = format_candidate_distribution(
+            pd.Series(["mask-a", "mask-a", "mask-b"], dtype="string")
+        )
+
+        self.assertIn("median=2.00000000", numeric)
+        self.assertIn("mask-a:2", categorical)
 
 
 if __name__ == "__main__":

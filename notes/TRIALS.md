@@ -43,8 +43,9 @@
 | [`trial-039`](trials/trial-039-app-opens-value-frequency.md) | Fold-safe frequency exact-значения app opens/day | **0.964568** LGBM blend OOF | +0.000030 | rejected; one fold negative, interval crosses zero |
 | [`trial-040`](trials/trial-040-weekend-value-frequency.md) | Fold-safe frequency exact-значения weekend screen time | **0.964567** LGBM blend OOF | +0.000029 | rejected; one fold negative, interval crosses zero |
 | [`trial-041`](trials/trial-041-missing-pattern-frequency.md) | Fold-safe частота полной 12-битной маски пропусков | **0.964540** LGBM blend OOF | +0.000002 | rejected; effectively zero, mixed folds |
+| [`trial-042`](trials/trial-042-missing-pattern-category.md) | Полная 12-битная missing-mask как categorical-фича | **0.964150** LGBM blend OOF | -0.000388 | rejected; lost 2/2, interval negative |
 
-Следующий ID: `trial-042`. Канонические параметры быстрых trial хранятся в
+Следующий ID: `trial-043`. Канонические параметры быстрых trial хранятся в
 `src/trial_config.py` и включают 2-fold CV; кандидат перед финальной версией
 подтверждается на 5 folds. LightGBM-контроль использует 200 деревьев и exact/base
 rank blend 60/40 с полным exact-набором. CatBoost-контроль — самостоятельный
