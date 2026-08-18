@@ -48,8 +48,10 @@
 | [`trial-044`](trials/trial-044-notifications-target-encoding.md) | Leak-safe target encoding точного notifications/day поверх `trial-043` | **0.965142** LGBM blend OOF | **-0.000098** | rejected; lost 2/2 to `trial-043` |
 | [`trial-045`](trials/trial-045-all-target-encodings.md) | Leak-safe target encoding всех 15 смысловых фич поверх `trial-043` | **0.965572** LGBM blend OOF | **+0.000332** | accepted screening; won 2/2, interval positive |
 | [`trial-046`](trials/trial-046-prune-low-gain-target-encodings.md) | Одним блоком удалены шесть low-gain TE из `trial-045` | **0.965542** LGBM blend OOF | **-0.000029** | rejected; full 15-TE bundle retained |
+| [`trial-047`](trials/trial-047-standalone-ebm-kaggle.md) | Standalone EBM против standalone LightGBM, без TE | pending Kaggle run | pending | ready; CPU notebook |
+| [`trial-048`](trials/trial-048-standalone-pyboost-kaggle.md) | Standalone Py-Boost против standalone LightGBM, без TE | pending Kaggle run | pending | ready; NVIDIA GPU notebook |
 
-Следующий ID: `trial-047`. Канонические параметры быстрых trial хранятся в
+Следующий ID: `trial-049`. Канонические параметры быстрых trial хранятся в
 `src/trial_config.py` и включают 2-fold CV; кандидат перед финальной версией
 подтверждается на 5 folds. LightGBM-контроль использует 200 деревьев и exact/base
 rank blend 60/40 с полным exact-набором. CatBoost-контроль — самостоятельный
@@ -64,5 +66,7 @@ screening-линии и требует 5-fold подтверждения пер�
 проиграл пакету на `-0.000098` и был отклонён. `trial-045` добавил согласованный
 набор TE-копий всех 15 смысловых фич и выиграл `+0.000332`, в основном за счёт
 резкого усиления base-компонента. Единственная групповая чистка `trial-046`
-ухудшила blend на `-0.000029`, поэтому для полного эксперимента сохраняются все
-15 TE-копий.
+ухудшила blend на `-0.000029`. После `exp-008` TE-направление закрыто решением
+участника: следующие модели сохраняют четыре обычные фичи `trial-043`, но не
+используют 15 TE-копий. `trial-047/048` — отдельные model-family проверки в
+Kaggle; результаты появятся только после возврата notebook outputs.
