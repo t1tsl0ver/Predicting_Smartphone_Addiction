@@ -1,8 +1,12 @@
 # trial-048 — Standalone Py-Boost на Kaggle GPU
 
-- Статус: **ready for Kaggle GPU; not run yet**
+- Статус: **cancelled by participant before run; no result**
 - Среда: Kaggle NVIDIA GPU notebook
 - Контроль: standalone LightGBM на тех же folds и числовой матрице
+
+Участник отказался от направления новых семейств моделей до запуска notebook.
+Файл сохранён только как историческая заготовка; не запускать и не трактовать
+описанный ниже план как активный trial.
 
 ## Вопрос
 

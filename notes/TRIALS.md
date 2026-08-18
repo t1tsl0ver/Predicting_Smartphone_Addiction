@@ -48,8 +48,8 @@
 | [`trial-044`](trials/trial-044-notifications-target-encoding.md) | Leak-safe target encoding точного notifications/day поверх `trial-043` | **0.965142** LGBM blend OOF | **-0.000098** | rejected; lost 2/2 to `trial-043` |
 | [`trial-045`](trials/trial-045-all-target-encodings.md) | Leak-safe target encoding всех 15 смысловых фич поверх `trial-043` | **0.965572** LGBM blend OOF | **+0.000332** | accepted screening; won 2/2, interval positive |
 | [`trial-046`](trials/trial-046-prune-low-gain-target-encodings.md) | Одним блоком удалены шесть low-gain TE из `trial-045` | **0.965542** LGBM blend OOF | **-0.000029** | rejected; full 15-TE bundle retained |
-| [`trial-047`](trials/trial-047-standalone-ebm-kaggle.md) | Standalone EBM против standalone LightGBM, без TE | pending Kaggle run | pending | ready; CPU notebook |
-| [`trial-048`](trials/trial-048-standalone-pyboost-kaggle.md) | Standalone Py-Boost против standalone LightGBM, без TE | pending Kaggle run | pending | ready; NVIDIA GPU notebook |
+| [`trial-047`](trials/trial-047-standalone-ebm-kaggle.md) | Standalone EBM против standalone LightGBM, без TE | not run | — | cancelled by participant before Kaggle run |
+| [`trial-048`](trials/trial-048-standalone-pyboost-kaggle.md) | Standalone Py-Boost против standalone LightGBM, без TE | not run | — | cancelled by participant before Kaggle run |
 
 Следующий ID: `trial-049`. Канонические параметры быстрых trial хранятся в
 `src/trial_config.py` и включают 2-fold CV; кандидат перед финальной версией
@@ -68,5 +68,7 @@ screening-линии и требует 5-fold подтверждения пер�
 резкого усиления base-компонента. Единственная групповая чистка `trial-046`
 ухудшила blend на `-0.000029`. После `exp-008` TE-направление закрыто решением
 участника: следующие модели сохраняют четыре обычные фичи `trial-043`, но не
-используют 15 TE-копий. `trial-047/048` — отдельные model-family проверки в
-Kaggle; результаты появятся только после возврата notebook outputs.
+используют 15 TE-копий. Подготовленные Kaggle-проверки `trial-047/048` отменены
+участником до запуска и результатов не имеют. Новые model-family направления
+закрыты; дальнейшие кандидаты снова проверяются как изолированные LightGBM
+feature-trial после отдельного обсуждения.

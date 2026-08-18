@@ -1,8 +1,12 @@
 # trial-047 — Standalone EBM на Kaggle
 
-- Статус: **ready for Kaggle; not run yet**
+- Статус: **cancelled by participant before run; no result**
 - Среда: Kaggle CPU notebook
 - Контроль: standalone LightGBM на тех же folds и числовой матрице
+
+Участник отказался от направления новых семейств моделей до запуска notebook.
+Файл сохранён только как историческая заготовка; не запускать и не трактовать
+описанный ниже план как активный trial.
 
 ## Вопрос
 
