@@ -19,6 +19,8 @@ from cv_feature_trial import (  # noqa: E402
     WEEKEND_MINUS_DAILY_SCREEN,
     WORK_STUDY_SCREEN_SHARE,
     add_candidate_feature,
+    fold_frequency_values,
+    normalized_value_frequency,
     safe_ratio,
 )
 
@@ -81,6 +83,33 @@ class FeatureTrialTests(unittest.TestCase):
             add_candidate_feature(frame, NOTIFICATIONS_PER_SCREEN_HOUR)
         with self.assertRaisesRegex(ValueError, "Unknown candidate"):
             add_candidate_feature(example_frame(), "unknown")
+
+    def test_normalized_frequency_includes_missing_as_a_value(self) -> None:
+        result = normalized_value_frequency(pd.Series([1.0, 1.0, 2.0, np.nan]))
+
+        np.testing.assert_allclose(result, [0.5, 0.5, 0.25, 0.25])
+
+    def test_fold_frequency_uses_train_rows_only_and_maps_unseen_to_zero(self) -> None:
+        source = pd.Series([1.0, 1.0, 2.0, 1.0, 3.0, np.nan])
+
+        train_values, valid_values = fold_frequency_values(
+            source,
+            np.array([0, 1, 2]),
+            np.array([3, 4, 5]),
+        )
+
+        np.testing.assert_allclose(train_values, [2 / 3, 2 / 3, 1 / 3])
+        np.testing.assert_allclose(valid_values, [2 / 3, 0.0, 0.0])
+
+    def test_builds_frequency_candidate_for_schema_and_diagnostics(self) -> None:
+        frame = example_frame()
+
+        add_candidate_feature(frame, "daily_screen_time_hours_value_frequency")
+
+        np.testing.assert_allclose(
+            frame["daily_screen_time_hours_value_frequency"],
+            [1 / 3, 1 / 3, 1 / 3],
+        )
 
 
 if __name__ == "__main__":

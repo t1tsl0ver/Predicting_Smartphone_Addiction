@@ -17,7 +17,13 @@ from compare_oof import DEFAULT_TEST_SIZE
 from cv_drop_exact_feature import validate_control_artifacts
 from cv_family_blends import bootstrap_summary, build_feature_variants
 from cv_head_to_head import make_lightgbm
-from cv_lightgbm import ID_COLUMN, TARGET, percentile_rank, prepare_lightgbm
+from cv_lightgbm import (
+    ID_COLUMN,
+    RAW_NUMERIC_FEATURES,
+    TARGET,
+    percentile_rank,
+    prepare_lightgbm,
+)
 from progress_logging import LightGBMProgressCallback, RunLogger, format_duration
 from trial_config import (
     TRIAL_EXACT_WEIGHT,
@@ -35,6 +41,11 @@ ENTERTAINMENT_SCREEN_SHARE = "entertainment_screen_share"
 WORK_STUDY_SCREEN_SHARE = "work_study_screen_share"
 WEEKEND_MINUS_DAILY_SCREEN = "weekend_minus_daily_screen"
 MISSING_FEATURE_COUNT = "missing_feature_count"
+FREQUENCY_SUFFIX = "_value_frequency"
+
+FREQUENCY_CANDIDATES = {
+    f"{source}{FREQUENCY_SUFFIX}": source for source in RAW_NUMERIC_FEATURES
+}
 
 CANDIDATE_NAMES = {
     NOTIFICATIONS_PER_SCREEN_HOUR,
@@ -44,6 +55,7 @@ CANDIDATE_NAMES = {
     WORK_STUDY_SCREEN_SHARE,
     WEEKEND_MINUS_DAILY_SCREEN,
     MISSING_FEATURE_COUNT,
+    *FREQUENCY_CANDIDATES,
 }
 
 
@@ -85,6 +97,25 @@ def safe_ratio(numerator: pd.Series, denominator: pd.Series) -> pd.Series:
     return numerator / denominator.where(denominator > 0)
 
 
+def normalized_value_frequency(source: pd.Series) -> pd.Series:
+    keys = source.astype("string").fillna("__MISSING__")
+    frequencies = keys.value_counts(dropna=False) / len(keys)
+    return keys.map(frequencies).astype(float)
+
+
+def fold_frequency_values(
+    source: pd.Series,
+    train_indices: np.ndarray,
+    valid_indices: np.ndarray,
+) -> tuple[np.ndarray, np.ndarray]:
+    train_keys = source.iloc[train_indices].astype("string").fillna("__MISSING__")
+    valid_keys = source.iloc[valid_indices].astype("string").fillna("__MISSING__")
+    frequencies = train_keys.value_counts(dropna=False) / len(train_indices)
+    train_values = train_keys.map(frequencies).to_numpy(dtype=float)
+    valid_values = valid_keys.map(frequencies).fillna(0.0).to_numpy(dtype=float)
+    return train_values, valid_values
+
+
 def add_candidate_feature(frame: pd.DataFrame, candidate: str) -> str:
     original_features = [
         column for column in frame.columns if column not in (ID_COLUMN, TARGET)
@@ -119,6 +150,9 @@ def add_candidate_feature(frame: pd.DataFrame, candidate: str) -> str:
         )
     elif candidate == MISSING_FEATURE_COUNT:
         frame[candidate] = frame[original_features].isna().sum(axis=1).astype(np.int8)
+    elif candidate in FREQUENCY_CANDIDATES:
+        source = FREQUENCY_CANDIDATES[candidate]
+        frame[candidate] = normalized_value_frequency(frame[source])
     else:
         raise ValueError(f"Unknown candidate: {candidate}")
     return candidate
@@ -233,16 +267,30 @@ def main() -> None:
             raise ValueError("Cached control fold assignment changed unexpectedly")
 
         durations: dict[str, float] = {}
+        fold_frequency: tuple[np.ndarray, np.ndarray] | None = None
+        if args.candidate in FREQUENCY_CANDIDATES:
+            fold_frequency = fold_frequency_values(
+                train[FREQUENCY_CANDIDATES[args.candidate]],
+                train_indices,
+                valid_indices,
+            )
         for variant, (features, categorical, _) in variants.items():
+            x_train = features.iloc[train_indices]
+            x_valid = features.iloc[valid_indices]
+            if fold_frequency is not None:
+                x_train = x_train.copy()
+                x_valid = x_valid.copy()
+                x_train[candidate_feature] = fold_frequency[0]
+                x_valid[candidate_feature] = fold_frequency[1]
             model = make_lightgbm(args.iterations, args.learning_rate, fold_seed)
             label = f"Fold {fold}/{args.folds} LightGBM candidate {variant}"
             started = time.perf_counter()
             with logger.step(f"{label} | Train"):
                 model.fit(
-                    features.iloc[train_indices],
+                    x_train,
                     y_train,
                     categorical_feature=categorical,
-                    eval_X=features.iloc[valid_indices],
+                    eval_X=x_valid,
                     eval_y=y_valid,
                     eval_metric="auc",
                     callbacks=[
@@ -252,7 +300,7 @@ def main() -> None:
                     ],
                 )
             current_probability = model.predict_proba(
-                features.iloc[valid_indices]
+                x_valid
             )[:, 1]
             current_rank = percentile_rank(current_probability)
             probabilities[variant][valid_indices] = current_probability
@@ -355,6 +403,11 @@ def main() -> None:
             "base_weight": 1 - args.exact_weight,
             "exact_features": exact_features,
             "base_features": base_features,
+            "frequency_encoding_scope": (
+                "fold-train mapping; unseen validation values map to zero"
+                if args.candidate in FREQUENCY_CANDIDATES
+                else None
+            ),
         },
         "candidate_distribution": {
             "available": int(available.size),
