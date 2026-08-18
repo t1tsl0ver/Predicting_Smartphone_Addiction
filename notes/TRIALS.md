@@ -47,8 +47,9 @@
 | [`trial-043`](trials/trial-043-combine-four-screening-winners.md) | Одновременно добавлены четыре победителя одиночной feature-серии | **0.965240** LGBM blend OOF | **+0.000701** | accepted screening; won 2/2, also beats best single |
 | [`trial-044`](trials/trial-044-notifications-target-encoding.md) | Leak-safe target encoding точного notifications/day поверх `trial-043` | **0.965142** LGBM blend OOF | **-0.000098** | rejected; lost 2/2 to `trial-043` |
 | [`trial-045`](trials/trial-045-all-target-encodings.md) | Leak-safe target encoding всех 15 смысловых фич поверх `trial-043` | **0.965572** LGBM blend OOF | **+0.000332** | accepted screening; won 2/2, interval positive |
+| [`trial-046`](trials/trial-046-prune-low-gain-target-encodings.md) | Одним блоком удалены шесть low-gain TE из `trial-045` | **0.965542** LGBM blend OOF | **-0.000029** | rejected; full 15-TE bundle retained |
 
-Следующий ID: `trial-046`. Канонические параметры быстрых trial хранятся в
+Следующий ID: `trial-047`. Канонические параметры быстрых trial хранятся в
 `src/trial_config.py` и включают 2-fold CV; кандидат перед финальной версией
 подтверждается на 5 folds. LightGBM-контроль использует 200 деревьев и exact/base
 rank blend 60/40 с полным exact-набором. CatBoost-контроль — самостоятельный
@@ -62,4 +63,6 @@ screening-линии и требует 5-fold подтверждения пер�
 контролю. `trial-044` добавил leak-safe target encoding notifications/day, но
 проиграл пакету на `-0.000098` и был отклонён. `trial-045` добавил согласованный
 набор TE-копий всех 15 смысловых фич и выиграл `+0.000332`, в основном за счёт
-резкого усиления base-компонента.
+резкого усиления base-компонента. Единственная групповая чистка `trial-046`
+ухудшила blend на `-0.000029`, поэтому для полного эксперимента сохраняются все
+15 TE-копий.

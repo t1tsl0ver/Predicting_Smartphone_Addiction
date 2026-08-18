@@ -22,11 +22,16 @@ from cv_feature_trial import (  # noqa: E402
     CURRENT_TARGET_ENCODING_SOURCES,
     SCREENING_WINNERS_ALL_TARGET_ENCODINGS_BUNDLE,
     SCREENING_WINNERS_ALL_TARGET_ENCODINGS_FEATURES,
+    LOW_GAIN_TARGET_ENCODING_SOURCES,
+    PRUNED_TARGET_ENCODING_CANDIDATES,
+    SCREENING_WINNERS_PRUNED_TARGET_ENCODINGS_BUNDLE,
+    SCREENING_WINNERS_PRUNED_TARGET_ENCODINGS_FEATURES,
     SCREENING_WINNER_FEATURES,
     SCREENING_WINNERS_NOTIFICATIONS_TE_BUNDLE,
     SCREENING_WINNERS_NOTIFICATIONS_TE_FEATURES,
     SCREENING_WINNERS_BUNDLE,
     STANDALONE_TARGET_ENCODING_CANDIDATES,
+    TARGET_ENCODING_CANDIDATES,
     FAMILY_CONTROL_COLUMNS,
     FEATURE_TRIAL_CONTROL_COLUMNS,
     WEEKEND_MINUS_DAILY_SCREEN,
@@ -147,6 +152,22 @@ class FeatureTrialTests(unittest.TestCase):
         self.assertNotIn(
             "entertainment_screen_share_target_encoding",
             STANDALONE_TARGET_ENCODING_CANDIDATES,
+        )
+
+    def test_pruned_bundle_drops_exactly_the_six_low_gain_encodings(self) -> None:
+        frame = example_frame()
+
+        created = add_candidate_features(
+            frame, SCREENING_WINNERS_PRUNED_TARGET_ENCODINGS_BUNDLE
+        )
+        target_encoded = created[len(SCREENING_WINNER_FEATURES) :]
+
+        self.assertEqual(created, SCREENING_WINNERS_PRUNED_TARGET_ENCODINGS_FEATURES)
+        self.assertEqual(len(PRUNED_TARGET_ENCODING_CANDIDATES), 9)
+        self.assertEqual(len(target_encoded), 9)
+        self.assertEqual(
+            set(TARGET_ENCODING_CANDIDATES) - set(target_encoded),
+            {f"{source}_target_encoding" for source in LOW_GAIN_TARGET_ENCODING_SOURCES},
         )
 
     def test_smoothed_target_mapping_uses_mapping_rows_only(self) -> None:

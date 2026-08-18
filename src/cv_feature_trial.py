@@ -52,6 +52,9 @@ SCREENING_WINNERS_NOTIFICATIONS_TE_BUNDLE = (
 SCREENING_WINNERS_ALL_TARGET_ENCODINGS_BUNDLE = (
     "screening_winners_plus_all_target_encodings"
 )
+SCREENING_WINNERS_PRUNED_TARGET_ENCODINGS_BUNDLE = (
+    "screening_winners_plus_pruned_target_encodings"
+)
 
 ORIGINAL_PREDICTORS = (
     *RAW_NUMERIC_FEATURES,
@@ -100,6 +103,26 @@ SCREENING_WINNERS_ALL_TARGET_ENCODINGS_FEATURES = (
     *TARGET_ENCODING_CANDIDATES,
 )
 
+LOW_GAIN_TARGET_ENCODING_SOURCES = {
+    "academic_work_impact",
+    WORK_STUDY_SCREEN_SHARE,
+    ENTERTAINMENT_SCREEN_SHARE,
+    "other_screen_time_hours",
+    "screen_social_load",
+    "high_stress_other_screen_per_sleep",
+}
+
+PRUNED_TARGET_ENCODING_CANDIDATES = {
+    feature: source
+    for feature, source in TARGET_ENCODING_CANDIDATES.items()
+    if source not in LOW_GAIN_TARGET_ENCODING_SOURCES
+}
+
+SCREENING_WINNERS_PRUNED_TARGET_ENCODINGS_FEATURES = (
+    *SCREENING_WINNER_FEATURES,
+    *PRUNED_TARGET_ENCODING_CANDIDATES,
+)
+
 CANDIDATE_NAMES = {
     NOTIFICATIONS_PER_SCREEN_HOUR,
     APP_OPENS_PER_SCREEN_HOUR,
@@ -113,6 +136,7 @@ CANDIDATE_NAMES = {
     SCREENING_WINNERS_BUNDLE,
     SCREENING_WINNERS_NOTIFICATIONS_TE_BUNDLE,
     SCREENING_WINNERS_ALL_TARGET_ENCODINGS_BUNDLE,
+    SCREENING_WINNERS_PRUNED_TARGET_ENCODINGS_BUNDLE,
     *FREQUENCY_CANDIDATES,
     *STANDALONE_TARGET_ENCODING_CANDIDATES,
 }
@@ -330,6 +354,8 @@ def add_candidate_features(frame: pd.DataFrame, candidate: str) -> tuple[str, ..
         candidates = SCREENING_WINNERS_NOTIFICATIONS_TE_FEATURES
     elif candidate == SCREENING_WINNERS_ALL_TARGET_ENCODINGS_BUNDLE:
         candidates = SCREENING_WINNERS_ALL_TARGET_ENCODINGS_FEATURES
+    elif candidate == SCREENING_WINNERS_PRUNED_TARGET_ENCODINGS_BUNDLE:
+        candidates = SCREENING_WINNERS_PRUNED_TARGET_ENCODINGS_FEATURES
     else:
         candidates = (candidate,)
     return tuple(add_candidate_feature(frame, feature) for feature in candidates)
