@@ -49,6 +49,9 @@ NOTIFICATIONS_TARGET_ENCODING = "notifications_per_day_target_encoding"
 SCREENING_WINNERS_NOTIFICATIONS_TE_BUNDLE = (
     "screening_winners_plus_notifications_target_encoding"
 )
+SCREENING_WINNERS_ALL_TARGET_ENCODINGS_BUNDLE = (
+    "screening_winners_plus_all_target_encodings"
+)
 
 ORIGINAL_PREDICTORS = (
     *RAW_NUMERIC_FEATURES,
@@ -60,10 +63,6 @@ ORIGINAL_PREDICTORS = (
 FREQUENCY_CANDIDATES = {
     f"{source}{FREQUENCY_SUFFIX}": source for source in RAW_NUMERIC_FEATURES
 }
-TARGET_ENCODING_CANDIDATES = {
-    NOTIFICATIONS_TARGET_ENCODING: "notifications_per_day",
-}
-
 SCREENING_WINNER_FEATURES = (
     WORK_STUDY_SCREEN_SHARE,
     ENTERTAINMENT_SCREEN_SHARE,
@@ -71,9 +70,34 @@ SCREENING_WINNER_FEATURES = (
     "daily_screen_time_hours_value_frequency",
 )
 
+CURRENT_TARGET_ENCODING_SOURCES = (
+    *RAW_NUMERIC_FEATURES,
+    "academic_work_impact",
+    WORK_STUDY_SCREEN_SHARE,
+    ENTERTAINMENT_SCREEN_SHARE,
+    "other_screen_time_hours",
+    "screen_social_load",
+    "high_stress_other_screen_per_sleep",
+)
+
+TARGET_ENCODING_CANDIDATES = {
+    f"{source}_target_encoding": source
+    for source in CURRENT_TARGET_ENCODING_SOURCES
+}
+STANDALONE_TARGET_ENCODING_CANDIDATES = {
+    feature: source
+    for feature, source in TARGET_ENCODING_CANDIDATES.items()
+    if source not in {WORK_STUDY_SCREEN_SHARE, ENTERTAINMENT_SCREEN_SHARE}
+}
+
 SCREENING_WINNERS_NOTIFICATIONS_TE_FEATURES = (
     *SCREENING_WINNER_FEATURES,
     NOTIFICATIONS_TARGET_ENCODING,
+)
+
+SCREENING_WINNERS_ALL_TARGET_ENCODINGS_FEATURES = (
+    *SCREENING_WINNER_FEATURES,
+    *TARGET_ENCODING_CANDIDATES,
 )
 
 CANDIDATE_NAMES = {
@@ -88,8 +112,9 @@ CANDIDATE_NAMES = {
     MISSING_PATTERN_CATEGORY,
     SCREENING_WINNERS_BUNDLE,
     SCREENING_WINNERS_NOTIFICATIONS_TE_BUNDLE,
+    SCREENING_WINNERS_ALL_TARGET_ENCODINGS_BUNDLE,
     *FREQUENCY_CANDIDATES,
-    *TARGET_ENCODING_CANDIDATES,
+    *STANDALONE_TARGET_ENCODING_CANDIDATES,
 }
 
 FAMILY_CONTROL_COLUMNS = {
@@ -303,6 +328,8 @@ def add_candidate_features(frame: pd.DataFrame, candidate: str) -> tuple[str, ..
         candidates = SCREENING_WINNER_FEATURES
     elif candidate == SCREENING_WINNERS_NOTIFICATIONS_TE_BUNDLE:
         candidates = SCREENING_WINNERS_NOTIFICATIONS_TE_FEATURES
+    elif candidate == SCREENING_WINNERS_ALL_TARGET_ENCODINGS_BUNDLE:
+        candidates = SCREENING_WINNERS_ALL_TARGET_ENCODINGS_FEATURES
     else:
         candidates = (candidate,)
     return tuple(add_candidate_feature(frame, feature) for feature in candidates)

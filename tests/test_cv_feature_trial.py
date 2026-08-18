@@ -19,10 +19,14 @@ from cv_feature_trial import (  # noqa: E402
     NOTIFICATIONS_PER_SCREEN_HOUR,
     NOTIFICATIONS_TARGET_ENCODING,
     OPENS_PER_NOTIFICATION,
+    CURRENT_TARGET_ENCODING_SOURCES,
+    SCREENING_WINNERS_ALL_TARGET_ENCODINGS_BUNDLE,
+    SCREENING_WINNERS_ALL_TARGET_ENCODINGS_FEATURES,
     SCREENING_WINNER_FEATURES,
     SCREENING_WINNERS_NOTIFICATIONS_TE_BUNDLE,
     SCREENING_WINNERS_NOTIFICATIONS_TE_FEATURES,
     SCREENING_WINNERS_BUNDLE,
+    STANDALONE_TARGET_ENCODING_CANDIDATES,
     FAMILY_CONTROL_COLUMNS,
     FEATURE_TRIAL_CONTROL_COLUMNS,
     WEEKEND_MINUS_DAILY_SCREEN,
@@ -119,6 +123,31 @@ class FeatureTrialTests(unittest.TestCase):
         self.assertEqual(created, SCREENING_WINNERS_NOTIFICATIONS_TE_FEATURES)
         self.assertEqual(created[-1], NOTIFICATIONS_TARGET_ENCODING)
         self.assertTrue((frame[NOTIFICATIONS_TARGET_ENCODING] == 0.0).all())
+
+    def test_all_target_encoding_bundle_covers_semantic_features_once(self) -> None:
+        frame = example_frame()
+
+        created = add_candidate_features(
+            frame, SCREENING_WINNERS_ALL_TARGET_ENCODINGS_BUNDLE
+        )
+        target_encoded = created[len(SCREENING_WINNER_FEATURES) :]
+
+        self.assertEqual(created, SCREENING_WINNERS_ALL_TARGET_ENCODINGS_FEATURES)
+        self.assertEqual(len(CURRENT_TARGET_ENCODING_SOURCES), 15)
+        self.assertEqual(len(target_encoded), 15)
+        self.assertEqual(len(set(target_encoded)), len(target_encoded))
+        self.assertTrue(all(name.endswith("_target_encoding") for name in target_encoded))
+        self.assertFalse(any("_exact_target_encoding" in name for name in target_encoded))
+        self.assertFalse(any("_value_frequency_target_encoding" in name for name in target_encoded))
+        self.assertTrue(all((frame[name] == 0.0).all() for name in target_encoded))
+        self.assertNotIn(
+            "work_study_screen_share_target_encoding",
+            STANDALONE_TARGET_ENCODING_CANDIDATES,
+        )
+        self.assertNotIn(
+            "entertainment_screen_share_target_encoding",
+            STANDALONE_TARGET_ENCODING_CANDIDATES,
+        )
 
     def test_smoothed_target_mapping_uses_mapping_rows_only(self) -> None:
         source = pd.Series(["a", "a", "b", "unseen"])
