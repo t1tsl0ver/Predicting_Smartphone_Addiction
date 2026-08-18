@@ -221,6 +221,28 @@
   создавался.
 - Канонические параметры быстрых trial, включая обязательные 2 folds, вынесены
   в `src/trial_config.py`, чтобы их не повторять в каждой команде.
+- Завершён `exp-006`: один exact-value CatBoost перенесён в полный режим,
+  аналогичный `exp-003`: 5 folds, максимум 3000 деревьев, `learning_rate=0.01`,
+  `depth=8`, `l2_leaf_reg=5` и early stopping 400. Использован CatBoost-набор из
+  21 признака без `gaming_hours_exact`; LightGBM заново не обучался.
+- Raw OOF `exp-006`: `0.9658916`; fold-rank OOF: `0.9658958`. Полный CatBoost
+  улучшил `trial-022` CatBoost/200 на `+0.0008440` и standalone `exp-003` на
+  `+0.0008516`, выиграв у `exp-003` на всех 5 folds.
+- Paired bootstrap против `exp-003`: `[+0.0006411, +0.0010812]`, 300/300
+  положительных повторов. `exp-006` становится новым лучшим standalone.
+- Бленд `exp-005` остался выше `exp-006` на `+0.0009786` OOF и выиграл все 5
+  folds. Paired interval CatBoost minus blend:
+  `[-0.0011683, -0.0008193]`, 0/300 положительных повторов.
+- Все folds `exp-006` выбрали 3000-ю итерацию: plateau не найден, но дальнейшее
+  увеличение дорогого CatBoost сейчас не приоритетно. Полный запуск занял
+  `1:28:58`; реализованы snapshots и продолжение по завершённым folds.
+- Создан `submission.csv` с CatBoost fold ranks, SHA-256:
+  `6c29b6eb9aca12c2e591550d19d6e8855fe5b2f286c5691a165e1d610c6ef0d1`.
+  Kaggle score: `0.96711`. Это на `+0.00030` выше standalone `exp-003`
+  (`0.96681`), но на `-0.00116` ниже `exp-005` (`0.96827`).
+- `exp-005` остаётся общим локальным и leaderboard-лидером. Активный поиск
+  возвращается к LightGBM; OOF/test CatBoost сохранены для возможного дешёвого
+  post-hoc blend без повторного обучения.
 
 ## Зафиксированное соглашение
 
@@ -245,8 +267,8 @@
 - Основная ветка: `main`.
 - Python: 3.12.10.
 - Локальная среда: `.venv`.
-- Скрипты активной серии: `src/cv_family_blends.py`, `src/cv_head_to_head.py`
-  и `src/cv_lightgbm.py`.
+- Скрипты активной серии: `src/cv_family_blends.py`, `src/cv_head_to_head.py`,
+  `src/cv_catboost.py` и `src/cv_lightgbm.py`.
 - Общий CatBoost/LightGBM runner: `src/cv_head_to_head.py`.
 - Данные: `data/train.csv`, `data/test.csv`, `data/sample_submission.csv`.
 - Исторический development holdout: 20%, stratified, seed 42.
@@ -254,13 +276,13 @@
   StratifiedKFold, shuffle, seed 2026 и 200 деревьев. Перед финальной версией
   перспективный кандидат подтверждается на 5 folds.
 - Быстрый LightGBM-контроль: exact/base rank blend 60/40, по 200 деревьев.
-- Быстрый CatBoost-контроль: самостоятельный exact-value CatBoost/200 без
-  `gaming_hours_exact`; base-компонент с весом 40% отклонён в `trial-023`.
-  Удаление принято для screening после `trial-024`, но ещё требует 5-fold
-  подтверждения перед exp.
-- По 5-fold OOF из `trial-022` exact CatBoost/200 практически равен текущему
-  лучшему одиночному `exp-003`; текущий общий локальный лидер — rank blend
-  `exp-005`.
+- CatBoost-направление припарковано после `exp-006`: полный CatBoost стал лучшим
+  standalone, но не догнал `exp-005` и требует заметно больше времени. Его
+  OOF/test predictions сохранены; повторно обучать модель для post-hoc blend не
+  потребуется.
+- Лучший standalone — CatBoost `exp-006` с fold-rank OOF `0.9658958` и Kaggle
+  `0.96711`; текущий общий локальный и leaderboard-лидер — rank blend `exp-005`
+  с OOF `0.9668744` и Kaggle `0.96827`.
 - Основная метрика: ROC AUC.
 - Все скрипты пишут этапы, прогресс итераций, ETA и метрики в консоль и в
   `artifacts/logs/`; частота задаётся CLI-параметрами логирования.
@@ -272,7 +294,8 @@
 
 ## Следующее действие
 
-Обсудить содержательную гипотезу для `trial-025`. Использовать канонический
-2-fold конфиг автоматически; CatBoost-контроль — 21 feature без
-`gaming_hours_exact`, LightGBM family blend остаётся на прежних 22/13 features.
-Submission для следующих trial создавать только по явной просьбе участника.
+Обсудить содержательную LightGBM-гипотезу для `trial-025`. Использовать
+канонический 2-fold trial-конфиг автоматически. CatBoost не переобучать; его
+сохранённые predictions можно использовать только для отдельно согласованного
+post-hoc сравнения. Submission для следующих trial создавать только по явной
+просьбе участника.
