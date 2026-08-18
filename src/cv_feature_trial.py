@@ -14,7 +14,7 @@ from sklearn.model_selection import StratifiedKFold
 
 from blend_cv import weighted_blend
 from compare_oof import DEFAULT_TEST_SIZE
-from cv_drop_exact_feature import validate_control_artifacts
+from cv_drop_exact_feature import expected_fold_numbers, validate_control_artifacts
 from cv_family_blends import bootstrap_summary, build_feature_variants
 from cv_head_to_head import make_lightgbm
 from cv_lightgbm import (
@@ -45,6 +45,10 @@ MISSING_PATTERN_FREQUENCY = "missing_pattern_frequency"
 MISSING_PATTERN_CATEGORY = "missing_pattern_category"
 FREQUENCY_SUFFIX = "_value_frequency"
 SCREENING_WINNERS_BUNDLE = "screening_winners_bundle"
+NOTIFICATIONS_TARGET_ENCODING = "notifications_per_day_target_encoding"
+SCREENING_WINNERS_NOTIFICATIONS_TE_BUNDLE = (
+    "screening_winners_plus_notifications_target_encoding"
+)
 
 ORIGINAL_PREDICTORS = (
     *RAW_NUMERIC_FEATURES,
@@ -56,12 +60,20 @@ ORIGINAL_PREDICTORS = (
 FREQUENCY_CANDIDATES = {
     f"{source}{FREQUENCY_SUFFIX}": source for source in RAW_NUMERIC_FEATURES
 }
+TARGET_ENCODING_CANDIDATES = {
+    NOTIFICATIONS_TARGET_ENCODING: "notifications_per_day",
+}
 
 SCREENING_WINNER_FEATURES = (
     WORK_STUDY_SCREEN_SHARE,
     ENTERTAINMENT_SCREEN_SHARE,
     "notifications_per_day_value_frequency",
     "daily_screen_time_hours_value_frequency",
+)
+
+SCREENING_WINNERS_NOTIFICATIONS_TE_FEATURES = (
+    *SCREENING_WINNER_FEATURES,
+    NOTIFICATIONS_TARGET_ENCODING,
 )
 
 CANDIDATE_NAMES = {
@@ -75,7 +87,20 @@ CANDIDATE_NAMES = {
     MISSING_PATTERN_FREQUENCY,
     MISSING_PATTERN_CATEGORY,
     SCREENING_WINNERS_BUNDLE,
+    SCREENING_WINNERS_NOTIFICATIONS_TE_BUNDLE,
     *FREQUENCY_CANDIDATES,
+    *TARGET_ENCODING_CANDIDATES,
+}
+
+FAMILY_CONTROL_COLUMNS = {
+    "exact": "lightgbm_exact_fold_rank",
+    "base": "lightgbm_base_fold_rank",
+    "blend": "lightgbm_blend_fold_rank",
+}
+FEATURE_TRIAL_CONTROL_COLUMNS = {
+    "exact": "candidate_exact_fold_rank",
+    "base": "candidate_base_fold_rank",
+    "blend": "candidate_blend_fold_rank",
 }
 
 
@@ -108,6 +133,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--exact-weight", type=float, default=TRIAL_EXACT_WEIGHT)
     parser.add_argument("--bootstrap-repeats", type=int, default=100)
     parser.add_argument("--bootstrap-sample-size", type=int, default=DEFAULT_TEST_SIZE)
+    parser.add_argument("--target-encoding-alpha", type=float, default=50.0)
+    parser.add_argument("--target-encoding-inner-folds", type=int, default=5)
     parser.add_argument("--log-every", type=int, default=50)
     parser.add_argument("--output-dir", type=Path, default=Path("artifacts"))
     parser.add_argument("--run-id", type=str, required=True)
@@ -145,6 +172,79 @@ def fold_frequency_values(
     frequencies = train_keys.value_counts(dropna=False) / len(train_indices)
     train_values = train_keys.map(frequencies).to_numpy(dtype=float)
     valid_values = valid_keys.map(frequencies).fillna(0.0).to_numpy(dtype=float)
+    return train_values, valid_values
+
+
+def target_encoding_mapping(
+    source: pd.Series,
+    target: pd.Series,
+    indices: np.ndarray,
+    alpha: float,
+) -> tuple[pd.Series, float]:
+    if alpha < 0:
+        raise ValueError("Target-encoding alpha must be non-negative")
+    keys = source.iloc[indices].astype("string").fillna("__MISSING__")
+    values = target.iloc[indices].to_numpy(dtype=float)
+    global_mean = float(values.mean())
+    statistics = pd.DataFrame({"key": keys.to_numpy(), "target": values}).groupby(
+        "key", dropna=False
+    )["target"].agg(["sum", "count"])
+    mapping = (statistics["sum"] + alpha * global_mean) / (
+        statistics["count"] + alpha
+    )
+    return mapping, global_mean
+
+
+def apply_target_encoding(
+    source: pd.Series,
+    indices: np.ndarray,
+    mapping: pd.Series,
+    default: float,
+) -> np.ndarray:
+    keys = source.iloc[indices].astype("string").fillna("__MISSING__")
+    return keys.map(mapping).fillna(default).to_numpy(dtype=float)
+
+
+def fold_target_encoding_values(
+    source: pd.Series,
+    target: pd.Series,
+    train_indices: np.ndarray,
+    valid_indices: np.ndarray,
+    alpha: float,
+    inner_folds: int,
+    seed: int,
+) -> tuple[np.ndarray, np.ndarray]:
+    if inner_folds < 2:
+        raise ValueError("Target encoding requires at least two inner folds")
+    outer_target = target.iloc[train_indices]
+    if int(outer_target.value_counts().min()) < inner_folds:
+        raise ValueError("Not enough rows per target class for inner folds")
+
+    train_values = np.full(len(train_indices), np.nan)
+    splitter = StratifiedKFold(
+        n_splits=inner_folds, shuffle=True, random_state=seed
+    )
+    dummy = np.zeros((len(train_indices), 1), dtype=np.int8)
+    for inner_train_positions, inner_valid_positions in splitter.split(
+        dummy, outer_target
+    ):
+        mapping_indices = train_indices[inner_train_positions]
+        encoded_indices = train_indices[inner_valid_positions]
+        mapping, default = target_encoding_mapping(
+            source, target, mapping_indices, alpha
+        )
+        train_values[inner_valid_positions] = apply_target_encoding(
+            source, encoded_indices, mapping, default
+        )
+
+    validation_mapping, validation_default = target_encoding_mapping(
+        source, target, train_indices, alpha
+    )
+    valid_values = apply_target_encoding(
+        source, valid_indices, validation_mapping, validation_default
+    )
+    if not np.isfinite(train_values).all() or not np.isfinite(valid_values).all():
+        raise ValueError("Target encoding produced non-finite values")
     return train_values, valid_values
 
 
@@ -189,17 +289,22 @@ def add_candidate_feature(frame: pd.DataFrame, candidate: str) -> str:
     elif candidate in FREQUENCY_CANDIDATES:
         source = FREQUENCY_CANDIDATES[candidate]
         frame[candidate] = normalized_value_frequency(frame[source])
+    elif candidate in TARGET_ENCODING_CANDIDATES:
+        # The placeholder establishes a numeric schema only. Every model-facing
+        # value is replaced by a leak-safe outer/inner-fold encoding in main().
+        frame[candidate] = 0.0
     else:
         raise ValueError(f"Unknown candidate: {candidate}")
     return candidate
 
 
 def add_candidate_features(frame: pd.DataFrame, candidate: str) -> tuple[str, ...]:
-    candidates = (
-        SCREENING_WINNER_FEATURES
-        if candidate == SCREENING_WINNERS_BUNDLE
-        else (candidate,)
-    )
+    if candidate == SCREENING_WINNERS_BUNDLE:
+        candidates = SCREENING_WINNER_FEATURES
+    elif candidate == SCREENING_WINNERS_NOTIFICATIONS_TE_BUNDLE:
+        candidates = SCREENING_WINNERS_NOTIFICATIONS_TE_FEATURES
+    else:
+        candidates = (candidate,)
     return tuple(add_candidate_feature(frame, feature) for feature in candidates)
 
 
@@ -224,10 +329,74 @@ def validate_args(args: argparse.Namespace) -> None:
         raise ValueError("--exact-weight must be between 0 and 1")
     if args.bootstrap_repeats < 2 or args.bootstrap_sample_size < 2:
         raise ValueError("Bootstrap repeats and sample size must be at least 2")
+    if args.target_encoding_alpha < 0:
+        raise ValueError("--target-encoding-alpha must be non-negative")
+    if args.target_encoding_inner_folds < 2:
+        raise ValueError("--target-encoding-inner-folds must be at least 2")
     if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", args.run_id):
         raise ValueError(
             "--run-id may contain only letters, digits, dots, underscores and hyphens"
         )
+
+
+def resolve_control_prediction_columns(control: pd.DataFrame) -> dict[str, str]:
+    if set(FAMILY_CONTROL_COLUMNS.values()).issubset(control.columns):
+        return FAMILY_CONTROL_COLUMNS
+    if set(FEATURE_TRIAL_CONTROL_COLUMNS.values()).issubset(control.columns):
+        return FEATURE_TRIAL_CONTROL_COLUMNS
+    raise ValueError("Control OOF does not contain a supported LightGBM prediction set")
+
+
+def validate_feature_trial_control_artifacts(
+    train: pd.DataFrame,
+    control: pd.DataFrame,
+    control_metrics: dict[str, object],
+    folds: int,
+    seed: int,
+    iterations: int,
+    exact_weight: float,
+) -> None:
+    required_columns = {
+        "row_index",
+        ID_COLUMN,
+        "target",
+        "fold",
+        *FEATURE_TRIAL_CONTROL_COLUMNS.values(),
+    }
+    missing = sorted(required_columns - set(control.columns))
+    if missing:
+        raise ValueError(f"Feature-trial control OOF is missing columns: {missing}")
+    if len(control) != len(train):
+        raise ValueError("Control OOF row count differs from training data")
+    if not np.array_equal(control["row_index"], np.arange(len(train))):
+        raise ValueError("Control OOF row order differs from training data")
+    if not control[ID_COLUMN].equals(train[ID_COLUMN]):
+        raise ValueError("Control OOF ids differ from training data")
+    if not np.array_equal(control["target"].to_numpy(), train[TARGET].to_numpy()):
+        raise ValueError("Control OOF targets differ from training data")
+    if not np.array_equal(
+        control["fold"].to_numpy(dtype=np.int8),
+        expected_fold_numbers(train[TARGET], folds, seed),
+    ):
+        raise ValueError("Control OOF folds differ from the requested trial split")
+
+    if int(control_metrics.get("folds", -1)) != folds:
+        raise ValueError("Control metrics use a different fold count")
+    if int(control_metrics.get("seed", -1)) != seed:
+        raise ValueError("Control metrics use a different seed")
+    parameters = control_metrics.get("parameters")
+    if not isinstance(parameters, dict):
+        raise ValueError("Feature-trial control metrics have no parameters")
+    if int(parameters.get("iterations", -1)) != iterations:
+        raise ValueError("Control metrics use a different tree budget")
+    if not np.isclose(
+        float(parameters.get("exact_weight", np.nan)), exact_weight
+    ):
+        raise ValueError("Control metrics use a different blend weight")
+    if not np.isfinite(
+        control[list(FEATURE_TRIAL_CONTROL_COLUMNS.values())].to_numpy()
+    ).all():
+        raise ValueError("Control OOF contains missing or infinite predictions")
 
 
 def main() -> None:
@@ -242,15 +411,27 @@ def main() -> None:
         control_metrics = json.loads(args.control_metrics.read_text(encoding="utf-8"))
         if TARGET not in train or ID_COLUMN not in train:
             raise ValueError("Unexpected training schema")
-        validate_control_artifacts(
-            train,
-            control,
-            control_metrics,
-            args.folds,
-            args.seed,
-            args.iterations,
-            args.exact_weight,
-        )
+        control_columns = resolve_control_prediction_columns(control)
+        if control_columns == FAMILY_CONTROL_COLUMNS:
+            validate_control_artifacts(
+                train,
+                control,
+                control_metrics,
+                args.folds,
+                args.seed,
+                args.iterations,
+                args.exact_weight,
+            )
+        else:
+            validate_feature_trial_control_artifacts(
+                train,
+                control,
+                control_metrics,
+                args.folds,
+                args.seed,
+                args.iterations,
+                args.exact_weight,
+            )
 
     with logger.step(f"Build candidate feature set | {args.candidate}"):
         candidate_features = add_candidate_features(train, args.candidate)
@@ -274,8 +455,18 @@ def main() -> None:
         x_base = x_exact[base_features]
         y = train[TARGET]
 
-    candidate_distributions: dict[str, dict[str, float | int]] = {}
+    candidate_distributions: dict[str, dict[str, object]] = {}
     for candidate_feature in candidate_features:
+        if candidate_feature in TARGET_ENCODING_CANDIDATES:
+            logger.info(
+                f"Candidate | name={candidate_feature}, supervised values are "
+                "computed inside outer/inner folds"
+            )
+            candidate_distributions[candidate_feature] = {
+                "source": TARGET_ENCODING_CANDIDATES[candidate_feature],
+                "scope": "outer-train mapping; inner-OOF values for model train",
+            }
+            continue
         available = train[candidate_feature].dropna()
         logger.info(
             f"Candidate | name={candidate_feature}, available={len(available)}, "
@@ -315,9 +506,8 @@ def main() -> None:
 
     control_fold = control["fold"].to_numpy(dtype=np.int8)
     controls = {
-        "exact": control["lightgbm_exact_fold_rank"].to_numpy(),
-        "base": control["lightgbm_base_fold_rank"].to_numpy(),
-        "blend": control["lightgbm_blend_fold_rank"].to_numpy(),
+        variant: control[column].to_numpy()
+        for variant, column in control_columns.items()
     }
     splitter = StratifiedKFold(
         n_splits=args.folds, shuffle=True, random_state=args.seed
@@ -335,25 +525,35 @@ def main() -> None:
             raise ValueError("Cached control fold assignment changed unexpectedly")
 
         durations: dict[str, float] = {}
-        fold_frequencies: dict[str, tuple[np.ndarray, np.ndarray]] = {}
+        fold_derived_values: dict[str, tuple[np.ndarray, np.ndarray]] = {}
         for candidate_feature in candidate_features:
             if candidate_feature in FREQUENCY_CANDIDATES:
-                fold_frequencies[candidate_feature] = fold_frequency_values(
+                fold_derived_values[candidate_feature] = fold_frequency_values(
                     train[FREQUENCY_CANDIDATES[candidate_feature]],
                     train_indices,
                     valid_indices,
                 )
             elif candidate_feature == MISSING_PATTERN_FREQUENCY:
-                fold_frequencies[candidate_feature] = fold_frequency_values(
+                fold_derived_values[candidate_feature] = fold_frequency_values(
                     missing_pattern_keys(train), train_indices, valid_indices
+                )
+            elif candidate_feature in TARGET_ENCODING_CANDIDATES:
+                fold_derived_values[candidate_feature] = fold_target_encoding_values(
+                    train[TARGET_ENCODING_CANDIDATES[candidate_feature]],
+                    y,
+                    train_indices,
+                    valid_indices,
+                    args.target_encoding_alpha,
+                    args.target_encoding_inner_folds,
+                    fold_seed,
                 )
         for variant, (features, categorical, _) in variants.items():
             x_train = features.iloc[train_indices]
             x_valid = features.iloc[valid_indices]
-            if fold_frequencies:
+            if fold_derived_values:
                 x_train = x_train.copy()
                 x_valid = x_valid.copy()
-                for feature, (train_values, valid_values) in fold_frequencies.items():
+                for feature, (train_values, valid_values) in fold_derived_values.items():
                     x_train[feature] = train_values
                     x_valid[feature] = valid_values
             model = make_lightgbm(args.iterations, args.learning_rate, fold_seed)
@@ -487,6 +687,22 @@ def main() -> None:
                 if any(
                     feature in FREQUENCY_CANDIDATES
                     or feature == MISSING_PATTERN_FREQUENCY
+                    for feature in candidate_features
+                )
+                else None
+            ),
+            "target_encoding": (
+                {
+                    "scope": (
+                        "outer-train mapping for validation; inner-OOF mapping "
+                        "for model-train rows"
+                    ),
+                    "alpha": args.target_encoding_alpha,
+                    "inner_folds": args.target_encoding_inner_folds,
+                    "unseen_value": "mapping-train global target mean",
+                }
+                if any(
+                    feature in TARGET_ENCODING_CANDIDATES
                     for feature in candidate_features
                 )
                 else None

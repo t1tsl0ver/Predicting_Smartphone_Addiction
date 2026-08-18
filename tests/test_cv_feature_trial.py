@@ -17,18 +17,27 @@ from cv_feature_trial import (  # noqa: E402
     MISSING_PATTERN_CATEGORY,
     MISSING_PATTERN_FREQUENCY,
     NOTIFICATIONS_PER_SCREEN_HOUR,
+    NOTIFICATIONS_TARGET_ENCODING,
     OPENS_PER_NOTIFICATION,
     SCREENING_WINNER_FEATURES,
+    SCREENING_WINNERS_NOTIFICATIONS_TE_BUNDLE,
+    SCREENING_WINNERS_NOTIFICATIONS_TE_FEATURES,
     SCREENING_WINNERS_BUNDLE,
+    FAMILY_CONTROL_COLUMNS,
+    FEATURE_TRIAL_CONTROL_COLUMNS,
     WEEKEND_MINUS_DAILY_SCREEN,
     WORK_STUDY_SCREEN_SHARE,
     add_candidate_feature,
     add_candidate_features,
+    apply_target_encoding,
     fold_frequency_values,
+    fold_target_encoding_values,
     format_candidate_distribution,
     missing_pattern_keys,
     normalized_value_frequency,
+    resolve_control_prediction_columns,
     safe_ratio,
+    target_encoding_mapping,
 )
 
 
@@ -99,6 +108,65 @@ class FeatureTrialTests(unittest.TestCase):
         self.assertEqual(created, SCREENING_WINNER_FEATURES)
         self.assertTrue(all(feature in frame for feature in created))
         self.assertEqual(len(created), 4)
+
+    def test_builds_winner_bundle_plus_target_encoding_placeholder(self) -> None:
+        frame = example_frame()
+
+        created = add_candidate_features(
+            frame, SCREENING_WINNERS_NOTIFICATIONS_TE_BUNDLE
+        )
+
+        self.assertEqual(created, SCREENING_WINNERS_NOTIFICATIONS_TE_FEATURES)
+        self.assertEqual(created[-1], NOTIFICATIONS_TARGET_ENCODING)
+        self.assertTrue((frame[NOTIFICATIONS_TARGET_ENCODING] == 0.0).all())
+
+    def test_smoothed_target_mapping_uses_mapping_rows_only(self) -> None:
+        source = pd.Series(["a", "a", "b", "unseen"])
+        target = pd.Series([1, 0, 1, 0])
+
+        mapping, default = target_encoding_mapping(
+            source, target, np.array([0, 1, 2]), alpha=1.0
+        )
+        encoded = apply_target_encoding(
+            source, np.array([0, 2, 3]), mapping, default
+        )
+
+        np.testing.assert_allclose(encoded, [5 / 9, 5 / 6, 2 / 3])
+
+    def test_target_encoding_is_inner_oof_and_outer_fold_safe(self) -> None:
+        source = pd.Series(list("abcdefgh"))
+        target = pd.Series([0, 1, 0, 1, 0, 1, 0, 1])
+
+        train_values, valid_values = fold_target_encoding_values(
+            source,
+            target,
+            np.arange(6),
+            np.array([6, 7]),
+            alpha=0.0,
+            inner_folds=3,
+            seed=2026,
+        )
+
+        self.assertTrue(np.all((train_values > 0) & (train_values < 1)))
+        np.testing.assert_allclose(valid_values, [0.5, 0.5])
+
+    def test_resolves_family_and_feature_trial_control_predictions(self) -> None:
+        family = pd.DataFrame(
+            {column: [0.5] for column in FAMILY_CONTROL_COLUMNS.values()}
+        )
+        feature_trial = pd.DataFrame(
+            {column: [0.5] for column in FEATURE_TRIAL_CONTROL_COLUMNS.values()}
+        )
+
+        self.assertEqual(
+            resolve_control_prediction_columns(family), FAMILY_CONTROL_COLUMNS
+        )
+        self.assertEqual(
+            resolve_control_prediction_columns(feature_trial),
+            FEATURE_TRIAL_CONTROL_COLUMNS,
+        )
+        with self.assertRaisesRegex(ValueError, "supported LightGBM"):
+            resolve_control_prediction_columns(pd.DataFrame({"other": [0.5]}))
 
     def test_normalized_frequency_includes_missing_as_a_value(self) -> None:
         result = normalized_value_frequency(pd.Series([1.0, 1.0, 2.0, np.nan]))
