@@ -26,10 +26,14 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--primary-oof", type=Path, required=True)
     parser.add_argument("--primary-test", type=Path, required=True)
+    parser.add_argument("--primary-oof-column", type=str, default=OOF_PREDICTION)
+    parser.add_argument("--primary-test-column", type=str, default=TEST_PREDICTION)
     parser.add_argument("--primary-name", type=str, required=True)
     parser.add_argument("--primary-weight", type=float, required=True)
     parser.add_argument("--secondary-oof", type=Path, required=True)
     parser.add_argument("--secondary-test", type=Path, required=True)
+    parser.add_argument("--secondary-oof-column", type=str, default=OOF_PREDICTION)
+    parser.add_argument("--secondary-test-column", type=str, default=TEST_PREDICTION)
     parser.add_argument("--secondary-name", type=str, required=True)
     parser.add_argument("--run-id", type=str, required=True)
     parser.add_argument(
@@ -61,20 +65,22 @@ def weighted_blend(
     return primary_weight * primary + (1.0 - primary_weight) * secondary
 
 
-def load_oof(path: Path) -> pd.DataFrame:
-    columns = ["row_index", "fold", "target", OOF_PREDICTION]
+def load_oof(path: Path, prediction_column: str = OOF_PREDICTION) -> pd.DataFrame:
+    columns = ["row_index", "fold", "target", prediction_column]
     frame = pd.read_csv(path, usecols=columns).sort_values("row_index")
     if frame["row_index"].duplicated().any():
         raise ValueError(f"{path} contains duplicate OOF row indices")
-    return frame.reset_index(drop=True)
+    return frame.rename(columns={prediction_column: OOF_PREDICTION}).reset_index(
+        drop=True
+    )
 
 
-def load_test(path: Path) -> pd.DataFrame:
-    columns = ["id", TEST_PREDICTION]
+def load_test(path: Path, prediction_column: str = TEST_PREDICTION) -> pd.DataFrame:
+    columns = ["id", prediction_column]
     frame = pd.read_csv(path, usecols=columns)
     if frame["id"].duplicated().any():
         raise ValueError(f"{path} contains duplicate test ids")
-    return frame
+    return frame.rename(columns={prediction_column: TEST_PREDICTION})
 
 
 def main() -> None:
@@ -86,15 +92,15 @@ def main() -> None:
     logger = RunLogger("blend-cv", args.output_dir / "logs", args.run_id)
 
     with logger.step("Load and align OOF predictions"):
-        primary_oof = load_oof(args.primary_oof)
-        secondary_oof = load_oof(args.secondary_oof)
+        primary_oof = load_oof(args.primary_oof, args.primary_oof_column)
+        secondary_oof = load_oof(args.secondary_oof, args.secondary_oof_column)
         for column in ("row_index", "fold", "target"):
             if not primary_oof[column].equals(secondary_oof[column]):
                 raise ValueError(f"Primary and secondary OOF {column} values differ")
 
     with logger.step("Load and align test predictions"):
-        primary_test = load_test(args.primary_test)
-        secondary_test = load_test(args.secondary_test)
+        primary_test = load_test(args.primary_test, args.primary_test_column)
+        secondary_test = load_test(args.secondary_test, args.secondary_test_column)
         sample = pd.read_csv(args.sample_submission)
         if list(sample.columns) != ["id", "addicted_label"]:
             raise ValueError("Unexpected sample submission schema")
@@ -167,6 +173,8 @@ def main() -> None:
             "name": args.primary_name,
             "oof_path": str(args.primary_oof),
             "test_path": str(args.primary_test),
+            "oof_column": args.primary_oof_column,
+            "test_column": args.primary_test_column,
             "weight": args.primary_weight,
             "oof_auc": primary_auc,
         },
@@ -174,6 +182,8 @@ def main() -> None:
             "name": args.secondary_name,
             "oof_path": str(args.secondary_oof),
             "test_path": str(args.secondary_test),
+            "oof_column": args.secondary_oof_column,
+            "test_column": args.secondary_test_column,
             "weight": 1.0 - args.primary_weight,
             "oof_auc": secondary_auc,
         },
