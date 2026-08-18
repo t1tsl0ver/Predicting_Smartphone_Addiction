@@ -29,8 +29,9 @@
 | [`trial-025`](trials/trial-025-notifications-per-screen-hour.md) | Добавлен `notifications_per_screen_hour` в оба LGBM-компонента | **0.964550** LGBM blend OOF | +0.000012 | rejected; mixed folds, interval crosses zero |
 | [`trial-026`](trials/trial-026-app-opens-per-screen-hour.md) | Добавлен `app_opens_per_screen_hour` в оба LGBM-компонента | **0.964515** LGBM blend OOF | -0.000023 | rejected; negative point estimate, mixed folds |
 | [`trial-027`](trials/trial-027-app-opens-per-notification.md) | Добавлен `app_opens_per_notification` в оба LGBM-компонента | **0.964539** LGBM blend OOF | +0.000001 | rejected; effectively zero, mixed folds |
+| [`trial-028`](trials/trial-028-entertainment-screen-share.md) | Добавлен `(social + gaming) / daily` в оба LGBM-компонента | **0.964657** LGBM blend OOF | **+0.000118** | accepted for screening; won 2/2, interval positive |
 
-Следующий ID: `trial-028`. Канонические параметры быстрых trial хранятся в
+Следующий ID: `trial-029`. Канонические параметры быстрых trial хранятся в
 `src/trial_config.py` и включают 2-fold CV; кандидат перед финальной версией
 подтверждается на 5 folds. LightGBM-контроль использует 200 деревьев и exact/base
 rank blend 60/40 с полным exact-набором. CatBoost-контроль — самостоятельный
