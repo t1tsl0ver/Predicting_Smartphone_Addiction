@@ -55,6 +55,21 @@ SCREENING_WINNERS_ALL_TARGET_ENCODINGS_BUNDLE = (
 SCREENING_WINNERS_PRUNED_TARGET_ENCODINGS_BUNDLE = (
     "screening_winners_plus_pruned_target_encodings"
 )
+SCREENING_WINNERS_FIRST_DECIMAL_DIGITS_BUNDLE = (
+    "screening_winners_plus_first_decimal_digits"
+)
+SCREENING_WINNERS_SECOND_DECIMAL_DIGITS_BUNDLE = (
+    "screening_winners_plus_second_decimal_digits"
+)
+
+CONTINUOUS_HOUR_FEATURES = (
+    "daily_screen_time_hours",
+    "social_media_hours",
+    "gaming_hours",
+    "work_study_hours",
+    "sleep_hours",
+    "weekend_screen_time",
+)
 
 ORIGINAL_PREDICTORS = (
     *RAW_NUMERIC_FEATURES,
@@ -123,6 +138,35 @@ SCREENING_WINNERS_PRUNED_TARGET_ENCODINGS_FEATURES = (
     *PRUNED_TARGET_ENCODING_CANDIDATES,
 )
 
+
+def decimal_digit_feature_name(source: str, position: int) -> str:
+    if position not in (1, 2):
+        raise ValueError("Decimal digit position must be 1 or 2")
+    return f"{source}_decimal_digit_{position}"
+
+
+FIRST_DECIMAL_DIGIT_CANDIDATES = {
+    decimal_digit_feature_name(source, 1): source
+    for source in CONTINUOUS_HOUR_FEATURES
+}
+SECOND_DECIMAL_DIGIT_CANDIDATES = {
+    decimal_digit_feature_name(source, 2): source
+    for source in CONTINUOUS_HOUR_FEATURES
+}
+DECIMAL_DIGIT_CANDIDATES = {
+    **FIRST_DECIMAL_DIGIT_CANDIDATES,
+    **SECOND_DECIMAL_DIGIT_CANDIDATES,
+}
+
+SCREENING_WINNERS_FIRST_DECIMAL_DIGITS_FEATURES = (
+    *SCREENING_WINNER_FEATURES,
+    *FIRST_DECIMAL_DIGIT_CANDIDATES,
+)
+SCREENING_WINNERS_SECOND_DECIMAL_DIGITS_FEATURES = (
+    *SCREENING_WINNER_FEATURES,
+    *SECOND_DECIMAL_DIGIT_CANDIDATES,
+)
+
 CANDIDATE_NAMES = {
     NOTIFICATIONS_PER_SCREEN_HOUR,
     APP_OPENS_PER_SCREEN_HOUR,
@@ -137,8 +181,11 @@ CANDIDATE_NAMES = {
     SCREENING_WINNERS_NOTIFICATIONS_TE_BUNDLE,
     SCREENING_WINNERS_ALL_TARGET_ENCODINGS_BUNDLE,
     SCREENING_WINNERS_PRUNED_TARGET_ENCODINGS_BUNDLE,
+    SCREENING_WINNERS_FIRST_DECIMAL_DIGITS_BUNDLE,
+    SCREENING_WINNERS_SECOND_DECIMAL_DIGITS_BUNDLE,
     *FREQUENCY_CANDIDATES,
     *STANDALONE_TARGET_ENCODING_CANDIDATES,
+    *DECIMAL_DIGIT_CANDIDATES,
 }
 
 FAMILY_CONTROL_COLUMNS = {
@@ -192,6 +239,15 @@ def parse_args() -> argparse.Namespace:
 
 def safe_ratio(numerator: pd.Series, denominator: pd.Series) -> pd.Series:
     return numerator / denominator.where(denominator > 0)
+
+
+def decimal_digit_category(source: pd.Series, position: int) -> pd.Series:
+    """Return a decimal digit as a category while preserving missing values."""
+    if position not in (1, 2):
+        raise ValueError("Decimal digit position must be 1 or 2")
+    scale = 10**position
+    shifted = np.floor(source.abs().mul(scale).add(1e-9)).astype("Int64")
+    return (shifted % 10).astype("string")
 
 
 def normalized_value_frequency(source: pd.Series) -> pd.Series:
@@ -342,6 +398,10 @@ def add_candidate_feature(frame: pd.DataFrame, candidate: str) -> str:
         # The placeholder establishes a numeric schema only. Every model-facing
         # value is replaced by a leak-safe outer/inner-fold encoding in main().
         frame[candidate] = 0.0
+    elif candidate in DECIMAL_DIGIT_CANDIDATES:
+        source = DECIMAL_DIGIT_CANDIDATES[candidate]
+        position = 1 if candidate in FIRST_DECIMAL_DIGIT_CANDIDATES else 2
+        frame[candidate] = decimal_digit_category(frame[source], position)
     else:
         raise ValueError(f"Unknown candidate: {candidate}")
     return candidate
@@ -356,6 +416,10 @@ def add_candidate_features(frame: pd.DataFrame, candidate: str) -> tuple[str, ..
         candidates = SCREENING_WINNERS_ALL_TARGET_ENCODINGS_FEATURES
     elif candidate == SCREENING_WINNERS_PRUNED_TARGET_ENCODINGS_BUNDLE:
         candidates = SCREENING_WINNERS_PRUNED_TARGET_ENCODINGS_FEATURES
+    elif candidate == SCREENING_WINNERS_FIRST_DECIMAL_DIGITS_BUNDLE:
+        candidates = SCREENING_WINNERS_FIRST_DECIMAL_DIGITS_FEATURES
+    elif candidate == SCREENING_WINNERS_SECOND_DECIMAL_DIGITS_BUNDLE:
+        candidates = SCREENING_WINNERS_SECOND_DECIMAL_DIGITS_FEATURES
     else:
         candidates = (candidate,)
     return tuple(add_candidate_feature(frame, feature) for feature in candidates)

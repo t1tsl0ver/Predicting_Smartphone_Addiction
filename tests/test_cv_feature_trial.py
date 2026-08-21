@@ -20,6 +20,8 @@ from cv_feature_trial import (  # noqa: E402
     NOTIFICATIONS_TARGET_ENCODING,
     OPENS_PER_NOTIFICATION,
     CURRENT_TARGET_ENCODING_SOURCES,
+    CONTINUOUS_HOUR_FEATURES,
+    FIRST_DECIMAL_DIGIT_CANDIDATES,
     SCREENING_WINNERS_ALL_TARGET_ENCODINGS_BUNDLE,
     SCREENING_WINNERS_ALL_TARGET_ENCODINGS_FEATURES,
     LOW_GAIN_TARGET_ENCODING_SOURCES,
@@ -30,6 +32,11 @@ from cv_feature_trial import (  # noqa: E402
     SCREENING_WINNERS_NOTIFICATIONS_TE_BUNDLE,
     SCREENING_WINNERS_NOTIFICATIONS_TE_FEATURES,
     SCREENING_WINNERS_BUNDLE,
+    SCREENING_WINNERS_FIRST_DECIMAL_DIGITS_BUNDLE,
+    SCREENING_WINNERS_FIRST_DECIMAL_DIGITS_FEATURES,
+    SCREENING_WINNERS_SECOND_DECIMAL_DIGITS_BUNDLE,
+    SCREENING_WINNERS_SECOND_DECIMAL_DIGITS_FEATURES,
+    SECOND_DECIMAL_DIGIT_CANDIDATES,
     STANDALONE_TARGET_ENCODING_CANDIDATES,
     TARGET_ENCODING_CANDIDATES,
     FAMILY_CONTROL_COLUMNS,
@@ -39,6 +46,7 @@ from cv_feature_trial import (  # noqa: E402
     add_candidate_feature,
     add_candidate_features,
     apply_target_encoding,
+    decimal_digit_category,
     fold_frequency_values,
     fold_target_encoding_values,
     format_candidate_distribution,
@@ -58,6 +66,7 @@ def example_frame() -> pd.DataFrame:
             "social_media_hours": [4.0, 1.0, 2.0],
             "gaming_hours": [1.0, 1.0, np.nan],
             "work_study_hours": [2.0, 1.0, 3.0],
+            "sleep_hours": [8.0, 7.0, 6.0],
             "notifications_per_day": [100.0, 50.0, 30.0],
             "app_opens_per_day": [40.0, 20.0, np.nan],
             "weekend_screen_time": [12.0, 3.0, 4.0],
@@ -168,6 +177,57 @@ class FeatureTrialTests(unittest.TestCase):
         self.assertEqual(
             set(TARGET_ENCODING_CANDIDATES) - set(target_encoded),
             {f"{source}_target_encoding" for source in LOW_GAIN_TARGET_ENCODING_SOURCES},
+        )
+
+    def test_decimal_digits_are_extracted_without_rounding_later_digits(self) -> None:
+        source = pd.Series([11.2, 5.09, 1.83, 4.549, 0.0, np.nan])
+
+        first = decimal_digit_category(source, 1)
+        second = decimal_digit_category(source, 2)
+
+        self.assertEqual(first.iloc[:5].tolist(), ["2", "0", "8", "5", "0"])
+        self.assertEqual(second.iloc[:5].tolist(), ["0", "9", "3", "4", "0"])
+        self.assertTrue(pd.isna(first.iloc[5]))
+        self.assertTrue(pd.isna(second.iloc[5]))
+        with self.assertRaisesRegex(ValueError, "position must be 1 or 2"):
+            decimal_digit_category(source, 3)
+
+    def test_builds_separate_first_and_second_decimal_digit_bundles(self) -> None:
+        first_frame = example_frame()
+        second_frame = example_frame()
+
+        first = add_candidate_features(
+            first_frame, SCREENING_WINNERS_FIRST_DECIMAL_DIGITS_BUNDLE
+        )
+        second = add_candidate_features(
+            second_frame, SCREENING_WINNERS_SECOND_DECIMAL_DIGITS_BUNDLE
+        )
+
+        self.assertEqual(first, SCREENING_WINNERS_FIRST_DECIMAL_DIGITS_FEATURES)
+        self.assertEqual(second, SCREENING_WINNERS_SECOND_DECIMAL_DIGITS_FEATURES)
+        self.assertEqual(len(FIRST_DECIMAL_DIGIT_CANDIDATES), 6)
+        self.assertEqual(len(SECOND_DECIMAL_DIGIT_CANDIDATES), 6)
+        self.assertEqual(
+            set(FIRST_DECIMAL_DIGIT_CANDIDATES.values()),
+            set(CONTINUOUS_HOUR_FEATURES),
+        )
+        self.assertEqual(
+            set(SECOND_DECIMAL_DIGIT_CANDIDATES.values()),
+            set(CONTINUOUS_HOUR_FEATURES),
+        )
+        self.assertTrue(all(feature in first_frame for feature in first))
+        self.assertTrue(all(feature in second_frame for feature in second))
+        self.assertTrue(
+            all(
+                str(first_frame[feature].dtype) == "string"
+                for feature in FIRST_DECIMAL_DIGIT_CANDIDATES
+            )
+        )
+        self.assertTrue(
+            all(
+                str(second_frame[feature].dtype) == "string"
+                for feature in SECOND_DECIMAL_DIGIT_CANDIDATES
+            )
         )
 
     def test_smoothed_target_mapping_uses_mapping_rows_only(self) -> None:
