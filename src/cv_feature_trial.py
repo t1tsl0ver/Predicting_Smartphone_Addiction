@@ -61,6 +61,10 @@ SCREENING_WINNERS_FIRST_DECIMAL_DIGITS_BUNDLE = (
 SCREENING_WINNERS_SECOND_DECIMAL_DIGITS_BUNDLE = (
     "screening_winners_plus_second_decimal_digits"
 )
+NUMERIC_VALUE_MEAN_SURPRISAL = "numeric_value_mean_surprisal"
+SCREENING_WINNERS_NUMERIC_SURPRISAL_BUNDLE = (
+    "screening_winners_plus_numeric_value_mean_surprisal"
+)
 
 CONTINUOUS_HOUR_FEATURES = (
     "daily_screen_time_hours",
@@ -166,6 +170,10 @@ SCREENING_WINNERS_SECOND_DECIMAL_DIGITS_FEATURES = (
     *SCREENING_WINNER_FEATURES,
     *SECOND_DECIMAL_DIGIT_CANDIDATES,
 )
+SCREENING_WINNERS_NUMERIC_SURPRISAL_FEATURES = (
+    *SCREENING_WINNER_FEATURES,
+    NUMERIC_VALUE_MEAN_SURPRISAL,
+)
 
 CANDIDATE_NAMES = {
     NOTIFICATIONS_PER_SCREEN_HOUR,
@@ -183,6 +191,8 @@ CANDIDATE_NAMES = {
     SCREENING_WINNERS_PRUNED_TARGET_ENCODINGS_BUNDLE,
     SCREENING_WINNERS_FIRST_DECIMAL_DIGITS_BUNDLE,
     SCREENING_WINNERS_SECOND_DECIMAL_DIGITS_BUNDLE,
+    SCREENING_WINNERS_NUMERIC_SURPRISAL_BUNDLE,
+    NUMERIC_VALUE_MEAN_SURPRISAL,
     *FREQUENCY_CANDIDATES,
     *STANDALONE_TARGET_ENCODING_CANDIDATES,
     *DECIMAL_DIGIT_CANDIDATES,
@@ -278,6 +288,61 @@ def fold_frequency_values(
     train_values = train_keys.map(frequencies).to_numpy(dtype=float)
     valid_values = valid_keys.map(frequencies).fillna(0.0).to_numpy(dtype=float)
     return train_values, valid_values
+
+
+def numeric_value_mean_surprisal_values(
+    frame: pd.DataFrame,
+    mapping_indices: np.ndarray,
+    encoded_indices: np.ndarray,
+    source_columns: tuple[str, ...] = RAW_NUMERIC_FEATURES,
+) -> np.ndarray:
+    """Average smoothed exact-value surprisal across available numeric values."""
+    missing_columns = [column for column in source_columns if column not in frame]
+    if missing_columns:
+        raise ValueError(
+            f"Cannot build numeric surprisal; missing columns: {missing_columns}"
+        )
+
+    surprisal_sum = np.zeros(len(encoded_indices), dtype=float)
+    available_count = np.zeros(len(encoded_indices), dtype=np.int8)
+    for column in source_columns:
+        mapping = frame[column].iloc[mapping_indices].dropna().astype("string")
+        counts = mapping.value_counts(dropna=False)
+        denominator = len(mapping) + len(counts) + 1
+
+        encoded = frame[column].iloc[encoded_indices]
+        available = encoded.notna().to_numpy()
+        encoded_counts = (
+            encoded.astype("string").map(counts).fillna(0.0).to_numpy(dtype=float)
+        )
+        column_surprisal = -np.log((encoded_counts + 1.0) / denominator)
+        surprisal_sum[available] += column_surprisal[available]
+        available_count[available] += 1
+
+    result = np.full(len(encoded_indices), np.nan)
+    np.divide(
+        surprisal_sum,
+        available_count,
+        out=result,
+        where=available_count > 0,
+    )
+    return result
+
+
+def fold_numeric_value_mean_surprisal_values(
+    frame: pd.DataFrame,
+    train_indices: np.ndarray,
+    valid_indices: np.ndarray,
+    source_columns: tuple[str, ...] = RAW_NUMERIC_FEATURES,
+) -> tuple[np.ndarray, np.ndarray]:
+    return (
+        numeric_value_mean_surprisal_values(
+            frame, train_indices, train_indices, source_columns
+        ),
+        numeric_value_mean_surprisal_values(
+            frame, train_indices, valid_indices, source_columns
+        ),
+    )
 
 
 def target_encoding_mapping(
@@ -402,6 +467,11 @@ def add_candidate_feature(frame: pd.DataFrame, candidate: str) -> str:
         source = DECIMAL_DIGIT_CANDIDATES[candidate]
         position = 1 if candidate in FIRST_DECIMAL_DIGIT_CANDIDATES else 2
         frame[candidate] = decimal_digit_category(frame[source], position)
+    elif candidate == NUMERIC_VALUE_MEAN_SURPRISAL:
+        indices = np.arange(len(frame))
+        frame[candidate] = numeric_value_mean_surprisal_values(
+            frame, indices, indices
+        )
     else:
         raise ValueError(f"Unknown candidate: {candidate}")
     return candidate
@@ -420,6 +490,8 @@ def add_candidate_features(frame: pd.DataFrame, candidate: str) -> tuple[str, ..
         candidates = SCREENING_WINNERS_FIRST_DECIMAL_DIGITS_FEATURES
     elif candidate == SCREENING_WINNERS_SECOND_DECIMAL_DIGITS_BUNDLE:
         candidates = SCREENING_WINNERS_SECOND_DECIMAL_DIGITS_FEATURES
+    elif candidate == SCREENING_WINNERS_NUMERIC_SURPRISAL_BUNDLE:
+        candidates = SCREENING_WINNERS_NUMERIC_SURPRISAL_FEATURES
     else:
         candidates = (candidate,)
     return tuple(add_candidate_feature(frame, feature) for feature in candidates)
@@ -664,6 +736,12 @@ def main() -> None:
                     args.target_encoding_inner_folds,
                     fold_seed,
                 )
+            elif candidate_feature == NUMERIC_VALUE_MEAN_SURPRISAL:
+                fold_derived_values[candidate_feature] = (
+                    fold_numeric_value_mean_surprisal_values(
+                        train, train_indices, valid_indices
+                    )
+                )
         for variant, (features, categorical, _) in variants.items():
             x_train = features.iloc[train_indices]
             x_valid = features.iloc[valid_indices]
@@ -822,6 +900,16 @@ def main() -> None:
                     feature in TARGET_ENCODING_CANDIDATES
                     for feature in candidate_features
                 )
+                else None
+            ),
+            "numeric_value_mean_surprisal": (
+                {
+                    "sources": list(RAW_NUMERIC_FEATURES),
+                    "scope": "fold-train exact-value frequencies",
+                    "smoothing": "add one; one reserved unseen category",
+                    "aggregation": "mean negative log frequency; missing ignored",
+                }
+                if NUMERIC_VALUE_MEAN_SURPRISAL in candidate_features
                 else None
             ),
         },

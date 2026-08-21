@@ -166,8 +166,15 @@ private leaderboard. В следующих моделях сохраняются
 после запятой у шести часовых колонок поверх no-TE пакета `trial-043`. Первая
 цифра проиграла (`-0.000047`, 2/2 отрицательных folds). Вторая дала небольшой
 screening-сигнал: OOF `0.965298`, delta `+0.000058`, 2/2 положительных folds и
-положительный residual-check рядом с `exp-005`. Она ещё не принята в финальный
-feature set и требует отдельного 5-fold подтверждения.
+положительный residual-check рядом с `exp-005`.
+
+По решению участника `trial-051` перевёл активные лёгкие проверки на 5 folds,
+оставив 200 деревьев и exact/base 60/40 blend. Одним пакетом проверены четыре
+обычные фичи `trial-043` и новый fold-safe mean surprisal точных значений девяти
+числовых колонок. OOF вырос с `0.965349` до **`0.966023`** (`+0.000674`), пакет
+выиграл 5/5 folds и прошёл bootstrap. Это текущий лёгкий baseline; отдельный
+вклад surprisal этим групповым trial не доказан. Ориентир тяжёлого no-TE
+`exp-005` — `0.966874`, до него осталось `0.000852` OOF.
 
 ## Структура репозитория
 
@@ -182,8 +189,9 @@ src/cv_lightgbm.py       быстрые LGBM-only CV, OOF и optional submission
 src/cv_family_blends.py  2-fold exact/base blends CatBoost и LightGBM
 src/cv_drop_exact_feature.py парная ablation exact-фичи против cached OOF
 src/cv_feature_trial.py  LightGBM feature/bundle trial против cached blend
+src/cv_lightweight_control.py воспроизводимый 5-fold LightGBM/200 контроль
 src/cv_target_encoded_blend.py полный 5-fold exact/base blend с leak-safe TE
-src/trial_config.py      канонические параметры быстрых 2-fold trial
+src/trial_config.py      параметры исторической быстрой 2-fold серии
 src/blend_cv.py          проверенный OOF/test rank blend и submission
 src/compare_oof.py       paired bootstrap для сравнения двух OOF-наборов
 src/progress_logging.py  общие консольные и файловые логи прогресса

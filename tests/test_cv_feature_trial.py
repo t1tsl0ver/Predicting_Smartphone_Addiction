@@ -18,6 +18,7 @@ from cv_feature_trial import (  # noqa: E402
     MISSING_PATTERN_FREQUENCY,
     NOTIFICATIONS_PER_SCREEN_HOUR,
     NOTIFICATIONS_TARGET_ENCODING,
+    NUMERIC_VALUE_MEAN_SURPRISAL,
     OPENS_PER_NOTIFICATION,
     CURRENT_TARGET_ENCODING_SOURCES,
     CONTINUOUS_HOUR_FEATURES,
@@ -31,6 +32,8 @@ from cv_feature_trial import (  # noqa: E402
     SCREENING_WINNER_FEATURES,
     SCREENING_WINNERS_NOTIFICATIONS_TE_BUNDLE,
     SCREENING_WINNERS_NOTIFICATIONS_TE_FEATURES,
+    SCREENING_WINNERS_NUMERIC_SURPRISAL_BUNDLE,
+    SCREENING_WINNERS_NUMERIC_SURPRISAL_FEATURES,
     SCREENING_WINNERS_BUNDLE,
     SCREENING_WINNERS_FIRST_DECIMAL_DIGITS_BUNDLE,
     SCREENING_WINNERS_FIRST_DECIMAL_DIGITS_FEATURES,
@@ -48,10 +51,12 @@ from cv_feature_trial import (  # noqa: E402
     apply_target_encoding,
     decimal_digit_category,
     fold_frequency_values,
+    fold_numeric_value_mean_surprisal_values,
     fold_target_encoding_values,
     format_candidate_distribution,
     missing_pattern_keys,
     normalized_value_frequency,
+    numeric_value_mean_surprisal_values,
     resolve_control_prediction_columns,
     safe_ratio,
     target_encoding_mapping,
@@ -62,6 +67,7 @@ def example_frame() -> pd.DataFrame:
     return pd.DataFrame(
         {
             "id": [1, 2, 3],
+            "age": [20.0, 21.0, 22.0],
             "daily_screen_time_hours": [10.0, 0.0, np.nan],
             "social_media_hours": [4.0, 1.0, 2.0],
             "gaming_hours": [1.0, 1.0, np.nan],
@@ -229,6 +235,60 @@ class FeatureTrialTests(unittest.TestCase):
                 for feature in SECOND_DECIMAL_DIGIT_CANDIDATES
             )
         )
+
+    def test_numeric_surprisal_uses_mapping_rows_and_ignores_missing(self) -> None:
+        frame = pd.DataFrame(
+            {
+                "first": [1.0, 1.0, 2.0, 1.0, 3.0, np.nan],
+                "second": [5.0, 6.0, np.nan, 5.0, 7.0, np.nan],
+            }
+        )
+
+        train_values, valid_values = fold_numeric_value_mean_surprisal_values(
+            frame,
+            np.array([0, 1, 2]),
+            np.array([3, 4, 5]),
+            source_columns=("first", "second"),
+        )
+
+        expected_first_seen = np.log(2.0)
+        expected_second_seen = np.log(2.5)
+        np.testing.assert_allclose(
+            train_values,
+            [
+                (expected_first_seen + expected_second_seen) / 2,
+                (expected_first_seen + expected_second_seen) / 2,
+                np.log(3.0),
+            ],
+        )
+        np.testing.assert_allclose(
+            valid_values[:2],
+            [
+                (expected_first_seen + expected_second_seen) / 2,
+                (np.log(6.0) + np.log(5.0)) / 2,
+            ],
+        )
+        self.assertTrue(np.isnan(valid_values[2]))
+
+    def test_builds_screening_winners_plus_numeric_surprisal_bundle(self) -> None:
+        frame = example_frame()
+
+        created = add_candidate_features(
+            frame, SCREENING_WINNERS_NUMERIC_SURPRISAL_BUNDLE
+        )
+
+        self.assertEqual(created, SCREENING_WINNERS_NUMERIC_SURPRISAL_FEATURES)
+        self.assertEqual(created[-1], NUMERIC_VALUE_MEAN_SURPRISAL)
+        self.assertTrue(frame[NUMERIC_VALUE_MEAN_SURPRISAL].notna().all())
+
+    def test_numeric_surprisal_rejects_missing_sources(self) -> None:
+        with self.assertRaisesRegex(ValueError, "missing columns"):
+            numeric_value_mean_surprisal_values(
+                pd.DataFrame({"first": [1.0]}),
+                np.array([0]),
+                np.array([0]),
+                source_columns=("missing",),
+            )
 
     def test_smoothed_target_mapping_uses_mapping_rows_only(self) -> None:
         source = pd.Series(["a", "a", "b", "unseen"])
