@@ -50,8 +50,10 @@
 | [`trial-046`](trials/trial-046-prune-low-gain-target-encodings.md) | Одним блоком удалены шесть low-gain TE из `trial-045` | **0.965542** LGBM blend OOF | **-0.000029** | rejected; full 15-TE bundle retained |
 | [`trial-047`](trials/trial-047-standalone-ebm-kaggle.md) | Standalone EBM против standalone LightGBM, без TE | not run | — | cancelled by participant before Kaggle run |
 | [`trial-048`](trials/trial-048-standalone-pyboost-kaggle.md) | Standalone Py-Boost против standalone LightGBM, без TE | not run | — | cancelled by participant before Kaggle run |
+| [`trial-049`](trials/trial-049-first-decimal-digits.md) | Первые десятичные цифры шести часовых колонок поверх `trial-043` | 0.965193 LGBM blend OOF | -0.000047 | rejected; lost 2/2, residual check negative |
+| [`trial-050`](trials/trial-050-second-decimal-digits.md) | Вторые десятичные цифры шести часовых колонок поверх `trial-043` | **0.965298** LGBM blend OOF | **+0.000058** | accepted screening; 2/2, intervals positive |
 
-Следующий ID: `trial-049`. Канонические параметры быстрых trial хранятся в
+Следующий ID: `trial-051`. Канонические параметры быстрых trial хранятся в
 `src/trial_config.py` и включают 2-fold CV; кандидат перед финальной версией
 подтверждается на 5 folds. LightGBM-контроль использует 200 деревьев и exact/base
 rank blend 60/40 с полным exact-набором. CatBoost-контроль — самостоятельный
@@ -71,4 +73,7 @@ screening-линии и требует 5-fold подтверждения пер�
 используют 15 TE-копий. Подготовленные Kaggle-проверки `trial-047/048` отменены
 участником до запуска и результатов не имеют. Новые model-family направления
 закрыты; дальнейшие кандидаты снова проверяются как изолированные LightGBM
-feature-trial после отдельного обсуждения.
+feature-trial после отдельного обсуждения. `trial-049` отклонил первые
+десятичные цифры. Независимый `trial-050` с вторыми цифрами дал `+0.000058`,
+выиграл 2/2 folds и сохранил сигнал в residual-проверке с `exp-005`; перед
+переносом требуется отдельное 5-fold подтверждение.
