@@ -12,7 +12,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from cv_feature_trial import (  # noqa: E402
     APP_OPENS_PER_SCREEN_HOUR,
+    DAILY_WEEKEND_COARSE_PAIR,
+    DOMINANT_SCREEN_COMPONENT,
     ENTERTAINMENT_SCREEN_SHARE,
+    GENERATOR_RELATION_CANDIDATES,
     MISSING_FEATURE_COUNT,
     MISSING_PATTERN_CATEGORY,
     MISSING_PATTERN_FREQUENCY,
@@ -21,7 +24,16 @@ from cv_feature_trial import (  # noqa: E402
     NUMERIC_VALUE_MEAN_SURPRISAL,
     LIGHTWEIGHT_BASELINE_SECOND_DECIMAL_DIGITS_BUNDLE,
     LIGHTWEIGHT_BASELINE_SECOND_DECIMAL_DIGITS_FEATURES,
+    LIGHTWEIGHT_BASELINE_FEATURES,
+    LIGHTWEIGHT_BASELINE_SOCIAL_SHARE_BUNDLE,
+    LIGHTWEIGHT_BASELINE_SOCIAL_SHARE_FEATURES,
+    NOTIFICATIONS_APP_OPENS_COARSE_PAIR,
     OPENS_PER_NOTIFICATION,
+    SCREEN_MIX_CONCENTRATION,
+    SCREEN_MIX_ENTROPY,
+    SOCIAL_SCREEN_SHARE,
+    SOCIAL_WITHIN_ENTERTAINMENT,
+    SOCIAL_WORK_SHARE_COARSE_PAIR,
     CURRENT_TARGET_ENCODING_SOURCES,
     CONTINUOUS_HOUR_FEATURES,
     FIRST_DECIMAL_DIGIT_CANDIDATES,
@@ -47,12 +59,15 @@ from cv_feature_trial import (  # noqa: E402
     FAMILY_CONTROL_COLUMNS,
     FEATURE_TRIAL_CONTROL_COLUMNS,
     WEEKEND_MINUS_DAILY_SCREEN,
+    WEEKEND_LINEAR_RESIDUAL,
     WORK_STUDY_SCREEN_SHARE,
     add_candidate_feature,
     add_candidate_features,
     apply_target_encoding,
+    binned_pair_category,
     decimal_digit_category,
     fold_frequency_values,
+    fold_linear_residual_values,
     fold_numeric_value_mean_surprisal_values,
     fold_target_encoding_values,
     format_candidate_distribution,
@@ -61,6 +76,8 @@ from cv_feature_trial import (  # noqa: E402
     numeric_value_mean_surprisal_values,
     resolve_control_prediction_columns,
     safe_ratio,
+    screen_mix_concentration,
+    screen_mix_entropy,
     target_encoding_mapping,
 )
 
@@ -102,6 +119,10 @@ class FeatureTrialTests(unittest.TestCase):
             WORK_STUDY_SCREEN_SHARE: 0.2,
             WEEKEND_MINUS_DAILY_SCREEN: 2.0,
             MISSING_FEATURE_COUNT: 0.0,
+            SOCIAL_WITHIN_ENTERTAINMENT: 0.8,
+            SOCIAL_SCREEN_SHARE: 0.4,
+            WEEKEND_LINEAR_RESIDUAL: 0.0,
+            SCREEN_MIX_CONCENTRATION: 0.3,
         }
 
         for candidate, expected in expected_first_value.items():
@@ -110,6 +131,78 @@ class FeatureTrialTests(unittest.TestCase):
                 created = add_candidate_feature(frame, candidate)
                 self.assertEqual(created, candidate)
                 self.assertAlmostEqual(float(frame.loc[0, candidate]), expected)
+
+    def test_builds_generator_relation_candidates(self) -> None:
+        expected_categorical = {
+            DOMINANT_SCREEN_COMPONENT: "social",
+            DAILY_WEEKEND_COARSE_PAIR: "3|3",
+            SOCIAL_WORK_SHARE_COARSE_PAIR: "2|1",
+            NOTIFICATIONS_APP_OPENS_COARSE_PAIR: "2|1",
+        }
+        for candidate in GENERATOR_RELATION_CANDIDATES:
+            with self.subTest(candidate=candidate):
+                frame = example_frame()
+                add_candidate_feature(frame, candidate)
+                self.assertIn(candidate, frame)
+                if candidate in expected_categorical:
+                    self.assertEqual(frame.loc[0, candidate], expected_categorical[candidate])
+                    self.assertEqual(str(frame[candidate].dtype), "string")
+
+        entropy_frame = example_frame()
+        add_candidate_feature(entropy_frame, SCREEN_MIX_ENTROPY)
+        expected_entropy = -sum(
+            share * np.log(share) for share in (0.4, 0.1, 0.2, 0.3)
+        )
+        self.assertAlmostEqual(
+            float(entropy_frame.loc[0, SCREEN_MIX_ENTROPY]), expected_entropy
+        )
+
+    def test_screen_mix_requires_complete_nonnegative_shares(self) -> None:
+        frame = example_frame()
+        frame.loc[1, "gaming_hours"] = 10.0
+
+        entropy = screen_mix_entropy(frame)
+        concentration = screen_mix_concentration(frame)
+
+        self.assertTrue(np.isfinite(entropy.iloc[0]))
+        self.assertTrue(np.isfinite(concentration.iloc[0]))
+        self.assertTrue(pd.isna(entropy.iloc[1]))
+        self.assertTrue(pd.isna(concentration.iloc[1]))
+        self.assertTrue(pd.isna(entropy.iloc[2]))
+
+    def test_fixed_binned_pair_preserves_missing_values(self) -> None:
+        result = binned_pair_category(
+            pd.Series([1.0, 5.0, np.nan]),
+            (2.0, 4.0),
+            pd.Series([10.0, 1.0, 3.0]),
+            (2.0, 8.0),
+        )
+
+        self.assertEqual(result.iloc[:2].tolist(), ["0|2", "2|0"])
+        self.assertTrue(pd.isna(result.iloc[2]))
+
+    def test_linear_residual_is_fit_on_mapping_rows_only(self) -> None:
+        frame = pd.DataFrame(
+            {
+                "x": [0.0, 1.0, 2.0, 3.0],
+                "y": [1.0, 3.0, 5.0, 20.0],
+            }
+        )
+
+        train_values, valid_values = fold_linear_residual_values(
+            frame,
+            "x",
+            "y",
+            np.array([0, 1, 2]),
+            np.array([3]),
+        )
+
+        np.testing.assert_allclose(train_values, [0.0, 0.0, 0.0])
+        np.testing.assert_allclose(valid_values, [13.0])
+        self.assertEqual(
+            LIGHTWEIGHT_BASELINE_FEATURES,
+            SCREENING_WINNERS_NUMERIC_SURPRISAL_FEATURES,
+        )
 
     def test_missing_count_uses_original_predictors_only(self) -> None:
         frame = example_frame()
@@ -301,6 +394,17 @@ class FeatureTrialTests(unittest.TestCase):
             created[len(SCREENING_WINNERS_NUMERIC_SURPRISAL_FEATURES) :],
             tuple(SECOND_DECIMAL_DIGIT_CANDIDATES),
         )
+
+    def test_builds_current_lightweight_social_share_bundle(self) -> None:
+        frame = example_frame()
+
+        created = add_candidate_features(
+            frame, LIGHTWEIGHT_BASELINE_SOCIAL_SHARE_BUNDLE
+        )
+
+        self.assertEqual(created, LIGHTWEIGHT_BASELINE_SOCIAL_SHARE_FEATURES)
+        self.assertEqual(created[:-1], LIGHTWEIGHT_BASELINE_FEATURES)
+        self.assertEqual(created[-1], SOCIAL_SCREEN_SHARE)
 
     def test_numeric_surprisal_rejects_missing_sources(self) -> None:
         with self.assertRaisesRegex(ValueError, "missing columns"):

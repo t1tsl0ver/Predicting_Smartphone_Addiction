@@ -68,6 +68,18 @@ SCREENING_WINNERS_NUMERIC_SURPRISAL_BUNDLE = (
 LIGHTWEIGHT_BASELINE_SECOND_DECIMAL_DIGITS_BUNDLE = (
     "lightweight_baseline_plus_second_decimal_digits"
 )
+LIGHTWEIGHT_BASELINE_SOCIAL_SHARE_BUNDLE = (
+    "lightweight_baseline_plus_social_screen_share"
+)
+SOCIAL_WITHIN_ENTERTAINMENT = "social_within_entertainment"
+SOCIAL_SCREEN_SHARE = "social_screen_share"
+WEEKEND_LINEAR_RESIDUAL = "weekend_linear_residual"
+SCREEN_MIX_ENTROPY = "screen_mix_entropy"
+SCREEN_MIX_CONCENTRATION = "screen_mix_concentration"
+DOMINANT_SCREEN_COMPONENT = "dominant_screen_component"
+DAILY_WEEKEND_COARSE_PAIR = "daily_weekend_coarse_pair"
+SOCIAL_WORK_SHARE_COARSE_PAIR = "social_work_share_coarse_pair"
+NOTIFICATIONS_APP_OPENS_COARSE_PAIR = "notifications_app_opens_coarse_pair"
 
 CONTINUOUS_HOUR_FEATURES = (
     "daily_screen_time_hours",
@@ -181,6 +193,23 @@ LIGHTWEIGHT_BASELINE_SECOND_DECIMAL_DIGITS_FEATURES = (
     *SCREENING_WINNERS_NUMERIC_SURPRISAL_FEATURES,
     *SECOND_DECIMAL_DIGIT_CANDIDATES,
 )
+LIGHTWEIGHT_BASELINE_FEATURES = SCREENING_WINNERS_NUMERIC_SURPRISAL_FEATURES
+LIGHTWEIGHT_BASELINE_SOCIAL_SHARE_FEATURES = (
+    *LIGHTWEIGHT_BASELINE_FEATURES,
+    SOCIAL_SCREEN_SHARE,
+)
+
+GENERATOR_RELATION_CANDIDATES = (
+    SOCIAL_WITHIN_ENTERTAINMENT,
+    SOCIAL_SCREEN_SHARE,
+    WEEKEND_LINEAR_RESIDUAL,
+    SCREEN_MIX_ENTROPY,
+    SCREEN_MIX_CONCENTRATION,
+    DOMINANT_SCREEN_COMPONENT,
+    DAILY_WEEKEND_COARSE_PAIR,
+    SOCIAL_WORK_SHARE_COARSE_PAIR,
+    NOTIFICATIONS_APP_OPENS_COARSE_PAIR,
+)
 
 CANDIDATE_NAMES = {
     NOTIFICATIONS_PER_SCREEN_HOUR,
@@ -200,7 +229,9 @@ CANDIDATE_NAMES = {
     SCREENING_WINNERS_SECOND_DECIMAL_DIGITS_BUNDLE,
     SCREENING_WINNERS_NUMERIC_SURPRISAL_BUNDLE,
     LIGHTWEIGHT_BASELINE_SECOND_DECIMAL_DIGITS_BUNDLE,
+    LIGHTWEIGHT_BASELINE_SOCIAL_SHARE_BUNDLE,
     NUMERIC_VALUE_MEAN_SURPRISAL,
+    *GENERATOR_RELATION_CANDIDATES,
     *FREQUENCY_CANDIDATES,
     *STANDALONE_TARGET_ENCODING_CANDIDATES,
     *DECIMAL_DIGIT_CANDIDATES,
@@ -238,6 +269,14 @@ def parse_args() -> argparse.Namespace:
         default=Path("artifacts/metrics_trial-023_family_blends.json"),
     )
     parser.add_argument("--candidate", choices=sorted(CANDIDATE_NAMES), required=True)
+    parser.add_argument(
+        "--include-lightweight-baseline",
+        action="store_true",
+        help=(
+            "Prepend the five accepted trial-051 features before adding the "
+            "requested candidate."
+        ),
+    )
     parser.add_argument("--folds", type=int, default=TRIAL_FOLDS)
     parser.add_argument("--seed", type=int, default=TRIAL_SEED)
     parser.add_argument("--iterations", type=int, default=TRIAL_ITERATIONS)
@@ -257,6 +296,123 @@ def parse_args() -> argparse.Namespace:
 
 def safe_ratio(numerator: pd.Series, denominator: pd.Series) -> pd.Series:
     return numerator / denominator.where(denominator > 0)
+
+
+def screen_component_shares(frame: pd.DataFrame) -> pd.DataFrame:
+    required = {
+        "daily_screen_time_hours",
+        "social_media_hours",
+        "gaming_hours",
+        "work_study_hours",
+    }
+    missing = sorted(required - set(frame.columns))
+    if missing:
+        raise ValueError(f"Cannot build screen-component shares; missing: {missing}")
+    daily = frame["daily_screen_time_hours"].where(
+        frame["daily_screen_time_hours"] > 0
+    )
+    other = (
+        frame["daily_screen_time_hours"]
+        - frame["social_media_hours"]
+        - frame["gaming_hours"]
+        - frame["work_study_hours"]
+    )
+    return pd.DataFrame(
+        {
+            "social": frame["social_media_hours"] / daily,
+            "gaming": frame["gaming_hours"] / daily,
+            "work_study": frame["work_study_hours"] / daily,
+            "other": other / daily,
+        },
+        index=frame.index,
+    )
+
+
+def screen_mix_entropy(frame: pd.DataFrame) -> pd.Series:
+    shares = screen_component_shares(frame)
+    valid = shares.notna().all(axis=1) & (shares >= 0).all(axis=1)
+    safe_shares = shares.where(shares > 0, 1.0)
+    values = -(shares.where(shares > 0, 0.0) * np.log(safe_shares)).sum(axis=1)
+    return values.where(valid)
+
+
+def screen_mix_concentration(frame: pd.DataFrame) -> pd.Series:
+    shares = screen_component_shares(frame)
+    valid = shares.notna().all(axis=1) & (shares >= 0).all(axis=1)
+    return shares.pow(2).sum(axis=1).where(valid)
+
+
+def dominant_screen_component(frame: pd.DataFrame) -> pd.Series:
+    shares = screen_component_shares(frame)
+    valid = shares.notna().all(axis=1) & (shares >= 0).all(axis=1)
+    result = pd.Series(pd.NA, index=frame.index, dtype="string")
+    result.loc[valid] = shares.loc[valid].idxmax(axis=1).astype("string")
+    return result
+
+
+def binned_pair_category(
+    first: pd.Series,
+    first_thresholds: tuple[float, ...],
+    second: pd.Series,
+    second_thresholds: tuple[float, ...],
+) -> pd.Series:
+    result = pd.Series(pd.NA, index=first.index, dtype="string")
+    valid = first.notna() & second.notna()
+    first_bin = np.digitize(
+        first.loc[valid].to_numpy(dtype=float), first_thresholds
+    )
+    second_bin = np.digitize(
+        second.loc[valid].to_numpy(dtype=float), second_thresholds
+    )
+    result.loc[valid] = pd.Series(
+        first_bin.astype(str) + "|" + second_bin.astype(str),
+        index=first.loc[valid].index,
+        dtype="string",
+    )
+    return result
+
+
+def linear_residual_values(
+    frame: pd.DataFrame,
+    predictor: str,
+    response: str,
+    mapping_indices: np.ndarray,
+    encoded_indices: np.ndarray,
+) -> np.ndarray:
+    missing = [column for column in (predictor, response) if column not in frame]
+    if missing:
+        raise ValueError(f"Cannot build linear residual; missing columns: {missing}")
+    mapping = frame[[predictor, response]].iloc[mapping_indices].dropna()
+    if len(mapping) < 2:
+        raise ValueError("Linear residual requires at least two complete mapping rows")
+    x = mapping[predictor].to_numpy(dtype=float)
+    y = mapping[response].to_numpy(dtype=float)
+    variance = float(np.square(x - x.mean()).sum())
+    if variance <= 0:
+        raise ValueError("Linear residual predictor has no mapping variance")
+    slope = float(np.dot(x - x.mean(), y - y.mean()) / variance)
+    intercept = float(y.mean() - slope * x.mean())
+    encoded = frame[[predictor, response]].iloc[encoded_indices]
+    return (
+        encoded[response] - intercept - slope * encoded[predictor]
+    ).to_numpy(dtype=float)
+
+
+def fold_linear_residual_values(
+    frame: pd.DataFrame,
+    predictor: str,
+    response: str,
+    train_indices: np.ndarray,
+    valid_indices: np.ndarray,
+) -> tuple[np.ndarray, np.ndarray]:
+    return (
+        linear_residual_values(
+            frame, predictor, response, train_indices, train_indices
+        ),
+        linear_residual_values(
+            frame, predictor, response, train_indices, valid_indices
+        ),
+    )
 
 
 def decimal_digit_category(source: pd.Series, position: int) -> pd.Series:
@@ -454,6 +610,57 @@ def add_candidate_feature(frame: pd.DataFrame, candidate: str) -> str:
         frame[candidate] = safe_ratio(
             frame["work_study_hours"], frame["daily_screen_time_hours"]
         )
+    elif candidate == SOCIAL_WITHIN_ENTERTAINMENT:
+        frame[candidate] = safe_ratio(
+            frame["social_media_hours"],
+            frame["social_media_hours"] + frame["gaming_hours"],
+        )
+    elif candidate == SOCIAL_SCREEN_SHARE:
+        frame[candidate] = safe_ratio(
+            frame["social_media_hours"], frame["daily_screen_time_hours"]
+        )
+    elif candidate == WEEKEND_LINEAR_RESIDUAL:
+        indices = np.arange(len(frame))
+        frame[candidate] = linear_residual_values(
+            frame,
+            "daily_screen_time_hours",
+            "weekend_screen_time",
+            indices,
+            indices,
+        )
+    elif candidate == SCREEN_MIX_ENTROPY:
+        frame[candidate] = screen_mix_entropy(frame)
+    elif candidate == SCREEN_MIX_CONCENTRATION:
+        frame[candidate] = screen_mix_concentration(frame)
+    elif candidate == DOMINANT_SCREEN_COMPONENT:
+        frame[candidate] = dominant_screen_component(frame)
+    elif candidate == DAILY_WEEKEND_COARSE_PAIR:
+        frame[candidate] = binned_pair_category(
+            frame["daily_screen_time_hours"],
+            (3.0, 6.0, 9.0, 12.0),
+            frame["weekend_screen_time"],
+            (4.0, 8.0, 12.0, 16.0),
+        )
+    elif candidate == SOCIAL_WORK_SHARE_COARSE_PAIR:
+        social_share = safe_ratio(
+            frame["social_media_hours"], frame["daily_screen_time_hours"]
+        )
+        work_share = safe_ratio(
+            frame["work_study_hours"], frame["daily_screen_time_hours"]
+        )
+        frame[candidate] = binned_pair_category(
+            social_share,
+            (0.2, 0.4, 0.6, 0.8),
+            work_share,
+            (0.2, 0.4, 0.6, 0.8),
+        )
+    elif candidate == NOTIFICATIONS_APP_OPENS_COARSE_PAIR:
+        frame[candidate] = binned_pair_category(
+            frame["notifications_per_day"],
+            (50.0, 100.0, 150.0, 200.0),
+            frame["app_opens_per_day"],
+            (40.0, 80.0, 120.0, 160.0),
+        )
     elif candidate == WEEKEND_MINUS_DAILY_SCREEN:
         frame[candidate] = (
             frame["weekend_screen_time"] - frame["daily_screen_time_hours"]
@@ -502,6 +709,8 @@ def add_candidate_features(frame: pd.DataFrame, candidate: str) -> tuple[str, ..
         candidates = SCREENING_WINNERS_NUMERIC_SURPRISAL_FEATURES
     elif candidate == LIGHTWEIGHT_BASELINE_SECOND_DECIMAL_DIGITS_BUNDLE:
         candidates = LIGHTWEIGHT_BASELINE_SECOND_DECIMAL_DIGITS_FEATURES
+    elif candidate == LIGHTWEIGHT_BASELINE_SOCIAL_SHARE_BUNDLE:
+        candidates = LIGHTWEIGHT_BASELINE_SOCIAL_SHARE_FEATURES
     else:
         candidates = (candidate,)
     return tuple(add_candidate_feature(frame, feature) for feature in candidates)
@@ -633,7 +842,19 @@ def main() -> None:
             )
 
     with logger.step(f"Build candidate feature set | {args.candidate}"):
-        candidate_features = add_candidate_features(train, args.candidate)
+        baseline_features: tuple[str, ...] = ()
+        if args.include_lightweight_baseline:
+            baseline_features = tuple(
+                add_candidate_feature(train, feature)
+                for feature in LIGHTWEIGHT_BASELINE_FEATURES
+            )
+        incremental_features = add_candidate_features(train, args.candidate)
+        overlap = sorted(set(baseline_features) & set(incremental_features))
+        if overlap:
+            raise ValueError(
+                f"Incremental candidates duplicate lightweight baseline: {overlap}"
+            )
+        candidate_features = (*baseline_features, *incremental_features)
         exact_features, base_features = build_feature_variants(train)
         for candidate_feature in candidate_features:
             if (
@@ -751,6 +972,14 @@ def main() -> None:
                     fold_numeric_value_mean_surprisal_values(
                         train, train_indices, valid_indices
                     )
+                )
+            elif candidate_feature == WEEKEND_LINEAR_RESIDUAL:
+                fold_derived_values[candidate_feature] = fold_linear_residual_values(
+                    train,
+                    "daily_screen_time_hours",
+                    "weekend_screen_time",
+                    train_indices,
+                    valid_indices,
                 )
         for variant, (features, categorical, _) in variants.items():
             x_train = features.iloc[train_indices]
@@ -877,6 +1106,8 @@ def main() -> None:
         "control_run_id": control_metrics.get("run_id"),
         "candidate_feature": args.candidate,
         "candidate_features": list(candidate_features),
+        "baseline_features": list(baseline_features),
+        "incremental_features": list(incremental_features),
         "folds": args.folds,
         "seed": args.seed,
         "parameters": {
@@ -920,6 +1151,15 @@ def main() -> None:
                     "aggregation": "mean negative log frequency; missing ignored",
                 }
                 if NUMERIC_VALUE_MEAN_SURPRISAL in candidate_features
+                else None
+            ),
+            "weekend_linear_residual": (
+                {
+                    "predictor": "daily_screen_time_hours",
+                    "response": "weekend_screen_time",
+                    "scope": "fold-train ordinary least squares; target unused",
+                }
+                if WEEKEND_LINEAR_RESIDUAL in candidate_features
                 else None
             ),
         },

@@ -54,8 +54,9 @@
 | [`trial-050`](trials/trial-050-second-decimal-digits.md) | Вторые десятичные цифры шести часовых колонок поверх `trial-043` | **0.965298** LGBM blend OOF | **+0.000058** | accepted screening; 2/2, intervals positive |
 | [`trial-051`](trials/trial-051-five-feature-lightweight-5fold.md) | 5-fold: четыре screening-фичи + mean surprisal числовых значений | **0.966023** LGBM blend OOF | **+0.000674** | accepted lightweight baseline; won 5/5, interval positive |
 | [`trial-052`](trials/trial-052-second-decimal-digits-5fold.md) | Вторые десятичные цифры поверх лёгкого 5-fold `trial-051` | 0.966055 LGBM blend OOF | +0.000033 | weak positive; not adopted, interval crosses zero |
+| [`trial-053`](trials/trial-053-social-within-entertainment.md) | Доля social внутри social + gaming поверх `trial-051` | 0.966038 LGBM blend OOF | +0.000015 | rejected; 2/5, interval crosses zero |
 
-Следующий ID: `trial-053`. По решению участника активная лёгкая линия теперь
+Следующий ID: `trial-054`. По решению участника активная лёгкая линия теперь
 использует 5-fold CV при прежних 200 деревьях. LightGBM-контроль — exact/base
 rank blend 60/40 с seed `2026`; его актуальная принятая точка — `trial-051` с
 OOF `0.9660227664`. Исторические 2-fold trial и `src/trial_config.py` остаются
