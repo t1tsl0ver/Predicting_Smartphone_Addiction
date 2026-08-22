@@ -62,11 +62,12 @@
 | [`trial-058`](trials/trial-058-dominant-screen-component.md) | Категория доминирующего компонента экранного времени | 0.965841 LGBM blend OOF | -0.000182 | rejected; lost 5/5, interval negative |
 | [`trial-059`](trials/trial-059-daily-weekend-coarse-pair.md) | Фиксированная categorical-пара daily × weekend | 0.965952 LGBM blend OOF | -0.000071 | rejected; interval negative |
 | [`trial-060`](trials/trial-060-social-work-share-coarse-pair.md) | Фиксированная categorical-пара social-share × work-share | 0.965877 LGBM blend OOF | -0.000146 | rejected; 1/5, interval negative |
+| [`trial-061`](trials/trial-061-notifications-app-opens-coarse-pair.md) | Фиксированная categorical-пара notifications × app opens | 0.965956 LGBM blend OOF | -0.000067 | rejected; lost 5/5, interval negative |
 
-Следующий ID: `trial-061`. По решению участника активная лёгкая линия теперь
+Следующий ID: `trial-062`. По решению участника активная лёгкая линия теперь
 использует 5-fold CV при прежних 200 деревьях. LightGBM-контроль — exact/base
-rank blend 60/40 с seed `2026`; его актуальная принятая точка — `trial-051` с
-OOF `0.9660227664`. Исторические 2-fold trial и `src/trial_config.py` остаются
+rank blend 60/40 с seed `2026`; его актуальная принятая точка — `trial-054` с
+OOF `0.9662173706`. Исторические 2-fold trial и `src/trial_config.py` остаются
 для воспроизводимости прежней screening-серии.
 
 Новая серия одиночных feature-trial использует тот же cached LightGBM exact/base
@@ -91,3 +92,11 @@ folds и стал текущим лёгким baseline. Отдельный вк�
 `trial-052` добавил вторые десятичные цифры уже поверх этого baseline. Base вырос
 на `+0.000536`, но blend — только на `+0.000033`; один fold отрицателен, interval
 пересекает ноль, поэтому каноническая точка не изменена.
+
+Серия `trial-053..061` изолированно проверила девять нецелевых отношений и
+дискретных режимов генератора поверх `trial-051`. Строгий критерий прошёл только
+`trial-054 social_screen_share`: OOF `0.9662173706`, delta `+0.0001946045`,
+победа 5/5 и положительный bootstrap interval. Три других точечных плюса
+(`trial-053/055/057`) нестабильны; остальные кандидаты отрицательны. Поэтому
+комбинация принятых кандидатов тождественна `trial-054` и отдельно не обучалась.
+`trial-054` — текущий лёгкий baseline.
