@@ -28,8 +28,12 @@ from cv_feature_trial import (  # noqa: E402
     LIGHTWEIGHT_BASELINE_FEATURES,
     LIGHTWEIGHT_BASELINE_SOCIAL_SHARE_BUNDLE,
     LIGHTWEIGHT_BASELINE_SOCIAL_SHARE_FEATURES,
+    LIGHTWEIGHT_BASELINE_OTHER_GAMING_SHARES_BUNDLE,
+    LIGHTWEIGHT_BASELINE_OTHER_GAMING_SHARE_FEATURES,
     NOTIFICATIONS_APP_OPENS_COARSE_PAIR,
     OTHER_SCREEN_SHARE,
+    OTHER_GAMING_SCREEN_SHARES_BUNDLE,
+    OTHER_GAMING_SCREEN_SHARE_FEATURES,
     OPENS_PER_NOTIFICATION,
     SCREEN_MIX_CONCENTRATION,
     SCREEN_MIX_ENTROPY,
@@ -431,6 +435,28 @@ class FeatureTrialTests(unittest.TestCase):
         self.assertEqual(created, LIGHTWEIGHT_BASELINE_SOCIAL_SHARE_FEATURES)
         self.assertEqual(created[:-1], LIGHTWEIGHT_BASELINE_FEATURES)
         self.assertEqual(created[-1], SOCIAL_SCREEN_SHARE)
+
+    def test_builds_other_and_gaming_share_bundle(self) -> None:
+        frame = example_frame()
+
+        created = add_candidate_features(frame, OTHER_GAMING_SCREEN_SHARES_BUNDLE)
+
+        self.assertEqual(created, OTHER_GAMING_SCREEN_SHARE_FEATURES)
+        self.assertEqual(created, (OTHER_SCREEN_SHARE, GAMING_SCREEN_SHARE))
+
+    def test_builds_current_lightweight_relation_share_bundle(self) -> None:
+        frame = example_frame()
+
+        created = add_candidate_features(
+            frame, LIGHTWEIGHT_BASELINE_OTHER_GAMING_SHARES_BUNDLE
+        )
+
+        self.assertEqual(created, LIGHTWEIGHT_BASELINE_OTHER_GAMING_SHARE_FEATURES)
+        self.assertEqual(
+            created[: len(LIGHTWEIGHT_BASELINE_SOCIAL_SHARE_FEATURES)],
+            LIGHTWEIGHT_BASELINE_SOCIAL_SHARE_FEATURES,
+        )
+        self.assertEqual(created[-2:], (OTHER_SCREEN_SHARE, GAMING_SCREEN_SHARE))
 
     def test_numeric_surprisal_rejects_missing_sources(self) -> None:
         with self.assertRaisesRegex(ValueError, "missing columns"):

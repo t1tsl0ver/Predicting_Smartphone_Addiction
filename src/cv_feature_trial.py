@@ -71,6 +71,9 @@ LIGHTWEIGHT_BASELINE_SECOND_DECIMAL_DIGITS_BUNDLE = (
 LIGHTWEIGHT_BASELINE_SOCIAL_SHARE_BUNDLE = (
     "lightweight_baseline_plus_social_screen_share"
 )
+LIGHTWEIGHT_BASELINE_OTHER_GAMING_SHARES_BUNDLE = (
+    "lightweight_baseline_plus_other_gaming_screen_shares"
+)
 SOCIAL_WITHIN_ENTERTAINMENT = "social_within_entertainment"
 SOCIAL_SCREEN_SHARE = "social_screen_share"
 WEEKEND_LINEAR_RESIDUAL = "weekend_linear_residual"
@@ -83,6 +86,7 @@ NOTIFICATIONS_APP_OPENS_COARSE_PAIR = "notifications_app_opens_coarse_pair"
 STRONG_SCREEN_MEAN_HOURS = "strong_screen_mean_hours"
 OTHER_SCREEN_SHARE = "other_screen_share"
 GAMING_SCREEN_SHARE = "gaming_screen_share"
+OTHER_GAMING_SCREEN_SHARES_BUNDLE = "other_and_gaming_screen_shares"
 
 STRONG_SCREEN_FEATURES = (
     "daily_screen_time_hours",
@@ -209,6 +213,14 @@ LIGHTWEIGHT_BASELINE_SOCIAL_SHARE_FEATURES = (
     *LIGHTWEIGHT_BASELINE_FEATURES,
     SOCIAL_SCREEN_SHARE,
 )
+OTHER_GAMING_SCREEN_SHARE_FEATURES = (
+    OTHER_SCREEN_SHARE,
+    GAMING_SCREEN_SHARE,
+)
+LIGHTWEIGHT_BASELINE_OTHER_GAMING_SHARE_FEATURES = (
+    *LIGHTWEIGHT_BASELINE_SOCIAL_SHARE_FEATURES,
+    *OTHER_GAMING_SCREEN_SHARE_FEATURES,
+)
 
 GENERATOR_RELATION_CANDIDATES = (
     SOCIAL_WITHIN_ENTERTAINMENT,
@@ -244,6 +256,8 @@ CANDIDATE_NAMES = {
     SCREENING_WINNERS_NUMERIC_SURPRISAL_BUNDLE,
     LIGHTWEIGHT_BASELINE_SECOND_DECIMAL_DIGITS_BUNDLE,
     LIGHTWEIGHT_BASELINE_SOCIAL_SHARE_BUNDLE,
+    LIGHTWEIGHT_BASELINE_OTHER_GAMING_SHARES_BUNDLE,
+    OTHER_GAMING_SCREEN_SHARES_BUNDLE,
     NUMERIC_VALUE_MEAN_SURPRISAL,
     *GENERATOR_RELATION_CANDIDATES,
     *FREQUENCY_CANDIDATES,
@@ -296,6 +310,14 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help=(
             "Prepend the six accepted trial-054 features before adding the "
+            "requested candidate."
+        ),
+    )
+    parser.add_argument(
+        "--include-trial-065-baseline",
+        action="store_true",
+        help=(
+            "Prepend the eight accepted trial-065 features before adding the "
             "requested candidate."
         ),
     )
@@ -749,6 +771,10 @@ def add_candidate_features(frame: pd.DataFrame, candidate: str) -> tuple[str, ..
         candidates = LIGHTWEIGHT_BASELINE_SECOND_DECIMAL_DIGITS_FEATURES
     elif candidate == LIGHTWEIGHT_BASELINE_SOCIAL_SHARE_BUNDLE:
         candidates = LIGHTWEIGHT_BASELINE_SOCIAL_SHARE_FEATURES
+    elif candidate == LIGHTWEIGHT_BASELINE_OTHER_GAMING_SHARES_BUNDLE:
+        candidates = LIGHTWEIGHT_BASELINE_OTHER_GAMING_SHARE_FEATURES
+    elif candidate == OTHER_GAMING_SCREEN_SHARES_BUNDLE:
+        candidates = OTHER_GAMING_SCREEN_SHARE_FEATURES
     else:
         candidates = (candidate,)
     return tuple(add_candidate_feature(frame, feature) for feature in candidates)
@@ -881,9 +907,19 @@ def main() -> None:
 
     with logger.step(f"Build candidate feature set | {args.candidate}"):
         baseline_features: tuple[str, ...] = ()
-        if args.include_lightweight_baseline and args.include_trial_054_baseline:
+        baseline_flags = (
+            args.include_lightweight_baseline,
+            args.include_trial_054_baseline,
+            args.include_trial_065_baseline,
+        )
+        if sum(baseline_flags) > 1:
             raise ValueError("Choose only one lightweight baseline flag")
-        if args.include_trial_054_baseline:
+        if args.include_trial_065_baseline:
+            baseline_features = tuple(
+                add_candidate_feature(train, feature)
+                for feature in LIGHTWEIGHT_BASELINE_OTHER_GAMING_SHARE_FEATURES
+            )
+        elif args.include_trial_054_baseline:
             baseline_features = tuple(
                 add_candidate_feature(train, feature)
                 for feature in LIGHTWEIGHT_BASELINE_SOCIAL_SHARE_FEATURES

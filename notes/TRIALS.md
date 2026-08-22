@@ -66,11 +66,12 @@
 | [`trial-062`](trials/trial-062-strong-screen-mean-hours.md) | Среднее пяти сильных экранных колонок поверх `trial-054` | 0.966212 LGBM blend OOF | -0.000005 | rejected; 3/5, interval crosses zero |
 | [`trial-063`](trials/trial-063-other-screen-share.md) | Доля прочего экранного времени поверх `trial-054` | **0.966425** LGBM blend OOF | **+0.000207** | accepted screening; won 5/5, interval positive |
 | [`trial-064`](trials/trial-064-gaming-screen-share.md) | Доля gaming в общем экранном времени поверх `trial-054` | **0.966440** LGBM blend OOF | **+0.000223** | accepted screening; won 5/5, interval positive |
+| [`trial-065`](trials/trial-065-combine-other-gaming-shares.md) | Совместно other- и gaming-доли поверх `trial-054` | **0.966646** LGBM blend OOF | **+0.000428** | accepted baseline; won 5/5, beats both singles 5/5 |
 
-Следующий ID: `trial-065`. По решению участника активная лёгкая линия теперь
+Следующий ID: `trial-066`. По решению участника активная лёгкая линия теперь
 использует 5-fold CV при прежних 200 деревьях. LightGBM-контроль — exact/base
-rank blend 60/40 с seed `2026`; его актуальная принятая точка — `trial-054` с
-OOF `0.9662173706`. Исторические 2-fold trial и `src/trial_config.py` остаются
+rank blend 60/40 с seed `2026`; его актуальная принятая точка — `trial-065` с
+OOF `0.9666455685`. Исторические 2-fold trial и `src/trial_config.py` остаются
 для воспроизводимости прежней screening-серии.
 
 Новая серия одиночных feature-trial использует тот же cached LightGBM exact/base
@@ -102,4 +103,9 @@ folds и стал текущим лёгким baseline. Отдельный вк�
 победа 5/5 и положительный bootstrap interval. Три других точечных плюса
 (`trial-053/055/057`) нестабильны; остальные кандидаты отрицательны. Поэтому
 комбинация принятых кандидатов тождественна `trial-054` и отдельно не обучалась.
-`trial-054` — текущий лёгкий baseline.
+`trial-054` стал контролем следующей серии. `trial-062` показал, что сильный
+marginal-сигнал среднего пяти экранных колонок полностью избыточен для модели:
+blend delta `-0.0000051`. `trial-063 other_screen_share` и `trial-064
+gaming_screen_share` независимо выиграли 5/5 с delta `+0.0002073` и
+`+0.0002231`. Их совместный `trial-065` дал `+0.0004282` до `0.9666455685`,
+выиграл 5/5 у контроля и 5/5 у каждого single. Это текущий лёгкий baseline.
