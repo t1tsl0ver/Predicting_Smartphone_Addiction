@@ -80,6 +80,17 @@ DOMINANT_SCREEN_COMPONENT = "dominant_screen_component"
 DAILY_WEEKEND_COARSE_PAIR = "daily_weekend_coarse_pair"
 SOCIAL_WORK_SHARE_COARSE_PAIR = "social_work_share_coarse_pair"
 NOTIFICATIONS_APP_OPENS_COARSE_PAIR = "notifications_app_opens_coarse_pair"
+STRONG_SCREEN_MEAN_HOURS = "strong_screen_mean_hours"
+OTHER_SCREEN_SHARE = "other_screen_share"
+GAMING_SCREEN_SHARE = "gaming_screen_share"
+
+STRONG_SCREEN_FEATURES = (
+    "daily_screen_time_hours",
+    "weekend_screen_time",
+    "social_media_hours",
+    "gaming_hours",
+    "work_study_hours",
+)
 
 CONTINUOUS_HOUR_FEATURES = (
     "daily_screen_time_hours",
@@ -209,6 +220,9 @@ GENERATOR_RELATION_CANDIDATES = (
     DAILY_WEEKEND_COARSE_PAIR,
     SOCIAL_WORK_SHARE_COARSE_PAIR,
     NOTIFICATIONS_APP_OPENS_COARSE_PAIR,
+    STRONG_SCREEN_MEAN_HOURS,
+    OTHER_SCREEN_SHARE,
+    GAMING_SCREEN_SHARE,
 )
 
 CANDIDATE_NAMES = {
@@ -274,6 +288,14 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help=(
             "Prepend the five accepted trial-051 features before adding the "
+            "requested candidate."
+        ),
+    )
+    parser.add_argument(
+        "--include-trial-054-baseline",
+        action="store_true",
+        help=(
+            "Prepend the six accepted trial-054 features before adding the "
             "requested candidate."
         ),
     )
@@ -619,6 +641,22 @@ def add_candidate_feature(frame: pd.DataFrame, candidate: str) -> str:
         frame[candidate] = safe_ratio(
             frame["social_media_hours"], frame["daily_screen_time_hours"]
         )
+    elif candidate == STRONG_SCREEN_MEAN_HOURS:
+        frame[candidate] = frame[list(STRONG_SCREEN_FEATURES)].mean(axis=1)
+    elif candidate == OTHER_SCREEN_SHARE:
+        other_screen_time = (
+            frame["daily_screen_time_hours"]
+            - frame["social_media_hours"]
+            - frame["gaming_hours"]
+            - frame["work_study_hours"]
+        )
+        frame[candidate] = safe_ratio(
+            other_screen_time, frame["daily_screen_time_hours"]
+        )
+    elif candidate == GAMING_SCREEN_SHARE:
+        frame[candidate] = safe_ratio(
+            frame["gaming_hours"], frame["daily_screen_time_hours"]
+        )
     elif candidate == WEEKEND_LINEAR_RESIDUAL:
         indices = np.arange(len(frame))
         frame[candidate] = linear_residual_values(
@@ -843,7 +881,14 @@ def main() -> None:
 
     with logger.step(f"Build candidate feature set | {args.candidate}"):
         baseline_features: tuple[str, ...] = ()
-        if args.include_lightweight_baseline:
+        if args.include_lightweight_baseline and args.include_trial_054_baseline:
+            raise ValueError("Choose only one lightweight baseline flag")
+        if args.include_trial_054_baseline:
+            baseline_features = tuple(
+                add_candidate_feature(train, feature)
+                for feature in LIGHTWEIGHT_BASELINE_SOCIAL_SHARE_FEATURES
+            )
+        elif args.include_lightweight_baseline:
             baseline_features = tuple(
                 add_candidate_feature(train, feature)
                 for feature in LIGHTWEIGHT_BASELINE_FEATURES

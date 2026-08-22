@@ -16,6 +16,7 @@ from cv_feature_trial import (  # noqa: E402
     DOMINANT_SCREEN_COMPONENT,
     ENTERTAINMENT_SCREEN_SHARE,
     GENERATOR_RELATION_CANDIDATES,
+    GAMING_SCREEN_SHARE,
     MISSING_FEATURE_COUNT,
     MISSING_PATTERN_CATEGORY,
     MISSING_PATTERN_FREQUENCY,
@@ -28,12 +29,15 @@ from cv_feature_trial import (  # noqa: E402
     LIGHTWEIGHT_BASELINE_SOCIAL_SHARE_BUNDLE,
     LIGHTWEIGHT_BASELINE_SOCIAL_SHARE_FEATURES,
     NOTIFICATIONS_APP_OPENS_COARSE_PAIR,
+    OTHER_SCREEN_SHARE,
     OPENS_PER_NOTIFICATION,
     SCREEN_MIX_CONCENTRATION,
     SCREEN_MIX_ENTROPY,
     SOCIAL_SCREEN_SHARE,
     SOCIAL_WITHIN_ENTERTAINMENT,
     SOCIAL_WORK_SHARE_COARSE_PAIR,
+    STRONG_SCREEN_FEATURES,
+    STRONG_SCREEN_MEAN_HOURS,
     CURRENT_TARGET_ENCODING_SOURCES,
     CONTINUOUS_HOUR_FEATURES,
     FIRST_DECIMAL_DIGIT_CANDIDATES,
@@ -123,6 +127,9 @@ class FeatureTrialTests(unittest.TestCase):
             SOCIAL_SCREEN_SHARE: 0.4,
             WEEKEND_LINEAR_RESIDUAL: 0.0,
             SCREEN_MIX_CONCENTRATION: 0.3,
+            STRONG_SCREEN_MEAN_HOURS: 5.8,
+            OTHER_SCREEN_SHARE: 0.3,
+            GAMING_SCREEN_SHARE: 0.1,
         }
 
         for candidate, expected in expected_first_value.items():
@@ -169,6 +176,25 @@ class FeatureTrialTests(unittest.TestCase):
         self.assertTrue(pd.isna(entropy.iloc[1]))
         self.assertTrue(pd.isna(concentration.iloc[1]))
         self.assertTrue(pd.isna(entropy.iloc[2]))
+
+    def test_strong_screen_mean_uses_available_values(self) -> None:
+        frame = example_frame()
+
+        add_candidate_feature(frame, STRONG_SCREEN_MEAN_HOURS)
+
+        self.assertEqual(
+            STRONG_SCREEN_FEATURES,
+            (
+                "daily_screen_time_hours",
+                "weekend_screen_time",
+                "social_media_hours",
+                "gaming_hours",
+                "work_study_hours",
+            ),
+        )
+        np.testing.assert_allclose(
+            frame[STRONG_SCREEN_MEAN_HOURS].to_numpy(), [5.8, 1.2, 3.0]
+        )
 
     def test_fixed_binned_pair_preserves_missing_values(self) -> None:
         result = binned_pair_category(
