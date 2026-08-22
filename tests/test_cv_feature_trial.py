@@ -19,6 +19,8 @@ from cv_feature_trial import (  # noqa: E402
     NOTIFICATIONS_PER_SCREEN_HOUR,
     NOTIFICATIONS_TARGET_ENCODING,
     NUMERIC_VALUE_MEAN_SURPRISAL,
+    LIGHTWEIGHT_BASELINE_SECOND_DECIMAL_DIGITS_BUNDLE,
+    LIGHTWEIGHT_BASELINE_SECOND_DECIMAL_DIGITS_FEATURES,
     OPENS_PER_NOTIFICATION,
     CURRENT_TARGET_ENCODING_SOURCES,
     CONTINUOUS_HOUR_FEATURES,
@@ -280,6 +282,25 @@ class FeatureTrialTests(unittest.TestCase):
         self.assertEqual(created, SCREENING_WINNERS_NUMERIC_SURPRISAL_FEATURES)
         self.assertEqual(created[-1], NUMERIC_VALUE_MEAN_SURPRISAL)
         self.assertTrue(frame[NUMERIC_VALUE_MEAN_SURPRISAL].notna().all())
+
+    def test_builds_lightweight_baseline_plus_second_decimal_digits(self) -> None:
+        frame = example_frame()
+
+        created = add_candidate_features(
+            frame, LIGHTWEIGHT_BASELINE_SECOND_DECIMAL_DIGITS_BUNDLE
+        )
+
+        self.assertEqual(
+            created, LIGHTWEIGHT_BASELINE_SECOND_DECIMAL_DIGITS_FEATURES
+        )
+        self.assertEqual(
+            created[: len(SCREENING_WINNERS_NUMERIC_SURPRISAL_FEATURES)],
+            SCREENING_WINNERS_NUMERIC_SURPRISAL_FEATURES,
+        )
+        self.assertEqual(
+            created[len(SCREENING_WINNERS_NUMERIC_SURPRISAL_FEATURES) :],
+            tuple(SECOND_DECIMAL_DIGIT_CANDIDATES),
+        )
 
     def test_numeric_surprisal_rejects_missing_sources(self) -> None:
         with self.assertRaisesRegex(ValueError, "missing columns"):
