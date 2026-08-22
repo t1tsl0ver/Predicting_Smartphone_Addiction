@@ -61,8 +61,9 @@
 | [`trial-057`](trials/trial-057-screen-mix-concentration.md) | Сумма квадратов четырёх долей экранного времени | 0.966028 LGBM blend OOF | +0.000006 | rejected; effectively zero, 3/5 |
 | [`trial-058`](trials/trial-058-dominant-screen-component.md) | Категория доминирующего компонента экранного времени | 0.965841 LGBM blend OOF | -0.000182 | rejected; lost 5/5, interval negative |
 | [`trial-059`](trials/trial-059-daily-weekend-coarse-pair.md) | Фиксированная categorical-пара daily × weekend | 0.965952 LGBM blend OOF | -0.000071 | rejected; interval negative |
+| [`trial-060`](trials/trial-060-social-work-share-coarse-pair.md) | Фиксированная categorical-пара social-share × work-share | 0.965877 LGBM blend OOF | -0.000146 | rejected; 1/5, interval negative |
 
-Следующий ID: `trial-060`. По решению участника активная лёгкая линия теперь
+Следующий ID: `trial-061`. По решению участника активная лёгкая линия теперь
 использует 5-fold CV при прежних 200 деревьях. LightGBM-контроль — exact/base
 rank blend 60/40 с seed `2026`; его актуальная принятая точка — `trial-051` с
 OOF `0.9660227664`. Исторические 2-fold trial и `src/trial_config.py` остаются
