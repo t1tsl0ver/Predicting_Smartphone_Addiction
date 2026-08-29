@@ -62,6 +62,24 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--iterations", type=int, default=3000)
     parser.add_argument("--learning-rate", type=float, default=0.01)
     parser.add_argument("--early-stopping-rounds", type=int, default=400)
+    parser.add_argument("--exact-iterations", type=int, default=None)
+    parser.add_argument("--base-iterations", type=int, default=None)
+    parser.add_argument("--exact-learning-rate", type=float, default=None)
+    parser.add_argument("--base-learning-rate", type=float, default=None)
+    parser.add_argument("--exact-early-stopping-rounds", type=int, default=None)
+    parser.add_argument("--base-early-stopping-rounds", type=int, default=None)
+    parser.add_argument(
+        "--cached-exact-oof",
+        type=Path,
+        default=None,
+        help="Reuse exact OOF predictions and train only the base variant.",
+    )
+    parser.add_argument(
+        "--cached-exact-test",
+        type=Path,
+        default=None,
+        help="Reuse averaged exact test predictions with --cached-exact-oof.",
+    )
     parser.add_argument("--exact-weight", type=float, default=0.60)
     parser.add_argument("--target-encoding-alpha", type=float, default=50.0)
     parser.add_argument("--target-encoding-inner-folds", type=int, default=5)
@@ -85,6 +103,26 @@ def validate_args(args: argparse.Namespace) -> None:
         raise ValueError("Iterations and log interval must be at least 1")
     if args.early_stopping_rounds < 0:
         raise ValueError("--early-stopping-rounds must be non-negative")
+    optional_positive = (
+        ("--exact-iterations", args.exact_iterations),
+        ("--base-iterations", args.base_iterations),
+        ("--exact-learning-rate", args.exact_learning_rate),
+        ("--base-learning-rate", args.base_learning_rate),
+    )
+    for label, value in optional_positive:
+        if value is not None and value <= 0:
+            raise ValueError(f"{label} must be positive")
+    optional_non_negative = (
+        ("--exact-early-stopping-rounds", args.exact_early_stopping_rounds),
+        ("--base-early-stopping-rounds", args.base_early_stopping_rounds),
+    )
+    for label, value in optional_non_negative:
+        if value is not None and value < 0:
+            raise ValueError(f"{label} must be non-negative")
+    if (args.cached_exact_oof is None) != (args.cached_exact_test is None):
+        raise ValueError(
+            "--cached-exact-oof and --cached-exact-test must be provided together"
+        )
     if not 0 <= args.exact_weight <= 1:
         raise ValueError("--exact-weight must be between 0 and 1")
     if args.target_encoding_alpha < 0:
@@ -95,6 +133,91 @@ def validate_args(args: argparse.Namespace) -> None:
         raise ValueError(
             "--run-id may contain only letters, digits, dots, underscores and hyphens"
         )
+
+
+def resolve_variant_training_configs(
+    args: argparse.Namespace,
+) -> dict[str, dict[str, int | float]]:
+    return {
+        "exact": {
+            "iterations": args.exact_iterations or args.iterations,
+            "learning_rate": args.exact_learning_rate or args.learning_rate,
+            "early_stopping_rounds": (
+                args.exact_early_stopping_rounds
+                if args.exact_early_stopping_rounds is not None
+                else args.early_stopping_rounds
+            ),
+        },
+        "base": {
+            "iterations": args.base_iterations or args.iterations,
+            "learning_rate": args.base_learning_rate or args.learning_rate,
+            "early_stopping_rounds": (
+                args.base_early_stopping_rounds
+                if args.base_early_stopping_rounds is not None
+                else args.early_stopping_rounds
+            ),
+        },
+    }
+
+
+def load_cached_exact_predictions(
+    oof_path: Path,
+    test_path: Path,
+    target: pd.Series,
+    test_ids: pd.Series,
+    folds: int,
+    seed: int,
+) -> dict[str, np.ndarray]:
+    oof_columns = [
+        "row_index",
+        "fold",
+        "target",
+        "exact_probability",
+        "exact_fold_rank",
+    ]
+    cached_oof = pd.read_csv(oof_path, usecols=oof_columns).sort_values(
+        "row_index"
+    )
+    if cached_oof["row_index"].duplicated().any():
+        raise ValueError("Cached exact OOF contains duplicate row indices")
+    expected_rows = np.arange(len(target))
+    if not np.array_equal(cached_oof["row_index"].to_numpy(), expected_rows):
+        raise ValueError("Cached exact OOF row indices differ")
+    if not np.array_equal(cached_oof["target"].to_numpy(), target.to_numpy()):
+        raise ValueError("Cached exact OOF targets differ")
+
+    expected_fold = np.zeros(len(target), dtype=np.int8)
+    splitter = StratifiedKFold(n_splits=folds, shuffle=True, random_state=seed)
+    for fold, (_, valid_indices) in enumerate(
+        splitter.split(expected_rows, target), start=1
+    ):
+        expected_fold[valid_indices] = fold
+    if not np.array_equal(cached_oof["fold"].to_numpy(), expected_fold):
+        raise ValueError("Cached exact OOF fold assignments differ")
+
+    test_columns = [ID_COLUMN, "exact_probability", "exact_cv_rank"]
+    cached_test = pd.read_csv(test_path, usecols=test_columns)
+    if cached_test[ID_COLUMN].duplicated().any():
+        raise ValueError("Cached exact test predictions contain duplicate ids")
+    if not cached_test[ID_COLUMN].reset_index(drop=True).equals(
+        test_ids.reset_index(drop=True)
+    ):
+        raise ValueError("Cached exact test ids differ")
+
+    arrays = {
+        "oof_probability": cached_oof["exact_probability"].to_numpy(
+            dtype=np.float64
+        ),
+        "oof_rank": cached_oof["exact_fold_rank"].to_numpy(dtype=np.float64),
+        "fold": expected_fold,
+        "test_probability": cached_test["exact_probability"].to_numpy(
+            dtype=np.float64
+        ),
+        "test_rank": cached_test["exact_cv_rank"].to_numpy(dtype=np.float64),
+    }
+    if not all(np.isfinite(values).all() for values in arrays.values()):
+        raise ValueError("Cached exact predictions contain missing or infinite values")
+    return arrays
 
 
 def frequency_values_for_test(
@@ -223,6 +346,21 @@ def checkpoint_signature(
     }
     if args.feature_bundle != TARGET_ENCODED_BUNDLE_MODE:
         signature["feature_bundle"] = args.feature_bundle
+    variant_overrides = (
+        args.exact_iterations,
+        args.base_iterations,
+        args.exact_learning_rate,
+        args.base_learning_rate,
+        args.exact_early_stopping_rounds,
+        args.base_early_stopping_rounds,
+    )
+    if any(value is not None for value in variant_overrides):
+        signature["variant_training_configs"] = resolve_variant_training_configs(
+            args
+        )
+    if args.cached_exact_oof is not None:
+        signature["cached_exact_oof"] = str(args.cached_exact_oof)
+        signature["cached_exact_test"] = str(args.cached_exact_test)
     return signature
 
 
@@ -254,11 +392,12 @@ def main() -> None:
     args = parse_args()
     validate_args(args)
     args.output_dir.mkdir(parents=True, exist_ok=True)
-    process_name = (
-        "cv-target-encoded-blend"
-        if args.feature_bundle == TARGET_ENCODED_BUNDLE_MODE
-        else "cv-full-feature-blend"
-    )
+    if args.cached_exact_oof is not None:
+        process_name = "cv-base-budget-extension"
+    elif args.feature_bundle == TARGET_ENCODED_BUNDLE_MODE:
+        process_name = "cv-target-encoded-blend"
+    else:
+        process_name = "cv-full-feature-blend"
     logger = RunLogger(process_name, args.output_dir / "logs", args.run_id)
 
     with logger.step("Load and validate train, test and sample submission"):
@@ -282,6 +421,19 @@ def main() -> None:
     active_target_encodings = tuple(
         feature for feature in candidate_features if feature in TARGET_ENCODING_CANDIDATES
     )
+    variant_training_configs = resolve_variant_training_configs(args)
+    cached_exact: dict[str, np.ndarray] | None = None
+    if args.cached_exact_oof is not None and args.cached_exact_test is not None:
+        with logger.step("Load and validate cached exact predictions"):
+            cached_exact = load_cached_exact_predictions(
+                args.cached_exact_oof,
+                args.cached_exact_test,
+                target,
+                test[ID_COLUMN],
+                args.folds,
+                args.seed,
+            )
+    trained_variants = {"base": variants["base"]} if cached_exact else variants
 
     signature = checkpoint_signature(
         args, len(train), len(test), exact_features, base_features
@@ -293,11 +445,17 @@ def main() -> None:
             f"inner-{args.target_encoding_inner_folds}-fold "
             f"alpha={args.target_encoding_alpha:g}"
         )
+    exact_config = variant_training_configs["exact"]
+    base_config = variant_training_configs["base"]
     logger.info(
-        f"Configuration | folds={args.folds}, trees<={args.iterations}, "
-        f"learning_rate={args.learning_rate}, early_stopping={args.early_stopping_rounds}, "
+        f"Configuration | folds={args.folds}, "
+        f"exact=trees<={exact_config['iterations']} lr={exact_config['learning_rate']} "
+        f"early_stopping={exact_config['early_stopping_rounds']}, "
+        f"base=trees<={base_config['iterations']} lr={base_config['learning_rate']} "
+        f"early_stopping={base_config['early_stopping_rounds']}, "
         f"blend={args.exact_weight:.0%}/{1 - args.exact_weight:.0%}, "
-        f"target_encoding={target_encoding_label}"
+        f"target_encoding={target_encoding_label}, exact_source="
+        f"{'cached' if cached_exact else 'trained'}"
     )
     logger.info(
         f"Features | exact={len(exact_features)}, base={len(base_features)}, "
@@ -316,10 +474,17 @@ def main() -> None:
         variant: np.zeros(test_count) for variant in variants
     }
     test_rank_sums = {variant: np.zeros(test_count) for variant in variants}
-    test_blend_sum = np.zeros(test_count)
     importance_sums = {
         variant: np.zeros(len(details[3])) for variant, details in variants.items()
     }
+    if cached_exact is not None:
+        fold_number[:] = cached_exact["fold"]
+        probabilities["exact"][:] = cached_exact["oof_probability"]
+        ranks["exact"][:] = cached_exact["oof_rank"]
+        test_probability_sums["exact"][:] = (
+            cached_exact["test_probability"] * args.folds
+        )
+        test_rank_sums["exact"][:] = cached_exact["test_rank"] * args.folds
     fold_results: list[dict[str, object]] = []
     splitter = StratifiedKFold(
         n_splits=args.folds, shuffle=True, random_state=args.seed
@@ -337,7 +502,7 @@ def main() -> None:
             with np.load(checkpoint_path) as checkpoint:
                 if not np.array_equal(checkpoint["valid_indices"], valid_indices):
                     raise ValueError(f"Fold {fold} checkpoint indices changed")
-                for variant in variants:
+                for variant in trained_variants:
                     probabilities[variant][valid_indices] = checkpoint[
                         f"{variant}_valid_probability"
                     ]
@@ -348,7 +513,6 @@ def main() -> None:
                     test_rank_sums[variant] += checkpoint[f"{variant}_test_rank"]
                     importance_sums[variant] += checkpoint[f"{variant}_importance"]
                 blend_oof[valid_indices] = checkpoint["blend_valid"]
-                test_blend_sum += checkpoint["blend_test"]
                 fold_result = json.loads(str(checkpoint["fold_result"].item()))
                 fold_results.append(fold_result)
             logger.info(f"FOLD {fold}/{args.folds} | restored from {checkpoint_path}")
@@ -374,9 +538,16 @@ def main() -> None:
         current_test_probabilities: dict[str, np.ndarray] = {}
         current_test_ranks: dict[str, np.ndarray] = {}
         current_importances: dict[str, np.ndarray] = {}
-        best_iterations: dict[str, int] = {}
+        best_iterations: dict[str, int | str] = (
+            {"exact": "cached"} if cached_exact is not None else {}
+        )
         durations: dict[str, float] = {}
-        for variant, (features, test_features, categorical, _) in variants.items():
+        for variant, (
+            features,
+            test_features,
+            categorical,
+            _,
+        ) in trained_variants.items():
             x_train = features.iloc[train_indices].copy()
             x_valid = features.iloc[valid_indices].copy()
             x_test = test_features.copy()
@@ -385,16 +556,20 @@ def main() -> None:
                 x_valid[feature] = valid_values
                 x_test[feature] = test_values
 
-            model = make_lightgbm(args.iterations, args.learning_rate, fold_seed)
+            training_config = variant_training_configs[variant]
+            iterations = int(training_config["iterations"])
+            learning_rate = float(training_config["learning_rate"])
+            early_stopping_rounds = int(
+                training_config["early_stopping_rounds"]
+            )
+            model = make_lightgbm(iterations, learning_rate, fold_seed)
             label = f"Fold {fold}/{args.folds} LightGBM {variant}"
             callbacks: list[object] = [
-                LightGBMProgressCallback(
-                    logger, label, args.iterations, args.log_every
-                )
+                LightGBMProgressCallback(logger, label, iterations, args.log_every)
             ]
-            if args.early_stopping_rounds > 0:
+            if early_stopping_rounds > 0:
                 callbacks.append(
-                    lgb.early_stopping(args.early_stopping_rounds, verbose=False)
+                    lgb.early_stopping(early_stopping_rounds, verbose=False)
                 )
             started = time.perf_counter()
             with logger.step(f"{label} | Train"):
@@ -433,13 +608,7 @@ def main() -> None:
             ranks["base"][valid_indices],
             args.exact_weight,
         )
-        current_test_blend = weighted_blend(
-            current_test_ranks["exact"],
-            current_test_ranks["base"],
-            args.exact_weight,
-        )
         blend_oof[valid_indices] = current_blend
-        test_blend_sum += current_test_blend
         fold_result = {
             "fold": fold,
             "train_rows": len(train_indices),
@@ -460,10 +629,9 @@ def main() -> None:
         checkpoint_arrays: dict[str, np.ndarray] = {
             "valid_indices": valid_indices,
             "blend_valid": current_blend,
-            "blend_test": current_test_blend,
             "fold_result": np.asarray(json.dumps(fold_result)),
         }
-        for variant in variants:
+        for variant in trained_variants:
             checkpoint_arrays[f"{variant}_valid_probability"] = probabilities[
                 variant
             ][valid_indices]
@@ -502,7 +670,12 @@ def main() -> None:
     test_ranks = {
         variant: values / args.folds for variant, values in test_rank_sums.items()
     }
-    test_blend = test_blend_sum / args.folds
+    if cached_exact is not None:
+        test_probabilities["exact"] = cached_exact["test_probability"]
+        test_ranks["exact"] = cached_exact["test_rank"]
+    test_blend = weighted_blend(
+        test_ranks["exact"], test_ranks["base"], args.exact_weight
+    )
     elapsed_seconds = time.perf_counter() - total_started
 
     target_encoding_scope = None
@@ -528,6 +701,13 @@ def main() -> None:
             "num_leaves": 31,
             "min_child_samples": 20,
             "early_stopping_rounds": args.early_stopping_rounds,
+            "variant_training_configs": variant_training_configs,
+            "cached_exact_oof": (
+                str(args.cached_exact_oof) if args.cached_exact_oof else None
+            ),
+            "cached_exact_test": (
+                str(args.cached_exact_test) if args.cached_exact_test else None
+            ),
             "exact_weight": args.exact_weight,
             "base_weight": 1 - args.exact_weight,
             "target_encoding_alpha": (
@@ -584,7 +764,7 @@ def main() -> None:
             }
         ).to_csv(test_path, index=False)
         importance_rows = []
-        for variant, (_, _, _, feature_names) in variants.items():
+        for variant, (_, _, _, feature_names) in trained_variants.items():
             for feature, gain in zip(
                 feature_names, importance_sums[variant] / args.folds, strict=True
             ):

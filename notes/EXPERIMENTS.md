@@ -13,7 +13,8 @@
 | [`exp-008`](experiments/exp-008-exp005-exp007-rank-blend.md) | 50/50 rank blend `exp-005` + `exp-007` | **0.967339 OOF** | **0.96863** | completed; current leader |
 | [`exp-009`](experiments/exp-009-full-trial066-no-te-lightgbm.md) | Full 5-fold exact/base LightGBM с семью no-TE фичами `trial-066` | **0.967137 OOF** | not submitted | completed locally; best standalone no-TE |
 | [`exp-010`](experiments/exp-010-exp009-exp007-rank-blend.md) | 55/45 rank blend `exp-009` + `exp-007` | **0.967528 OOF** | **0.96874** | completed; current leader |
+| [`exp-011`](experiments/exp-011-extended-base-budget-lightgbm.md) | Cached exact `exp-009` + base LightGBM 8000/800, fixed 60/40 | **0.967541 OOF** | not submitted | completed locally; best autonomous no-TE |
 
-`exp-010` — текущий локальный и leaderboard-лидер. Kaggle score `0.96874`
-подтвердил направление и улучшил `exp-008` на `0.00011`. Следующий итоговый
-ID — `exp-011`.
+`exp-011` — текущий локальный standalone-лидер; действующий leaderboard-лидер —
+`exp-010` с Kaggle `0.96874`. Увеличенный base-бюджет дал `+0.000404` к
+`exp-009` и выиграл 5/5. Следующий итоговый ID — `exp-012`.
