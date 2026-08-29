@@ -30,6 +30,9 @@ from cv_feature_trial import (  # noqa: E402
     LIGHTWEIGHT_BASELINE_SOCIAL_SHARE_FEATURES,
     LIGHTWEIGHT_BASELINE_OTHER_GAMING_SHARES_BUNDLE,
     LIGHTWEIGHT_BASELINE_OTHER_GAMING_SHARE_FEATURES,
+    TRIAL_065_WITHOUT_NUMERIC_SURPRISAL_BUNDLE,
+    TRIAL_065_WITHOUT_NUMERIC_SURPRISAL_FEATURES,
+    TRIAL_066_BASELINE_FEATURES,
     NOTIFICATIONS_APP_OPENS_COARSE_PAIR,
     OTHER_SCREEN_SHARE,
     OTHER_GAMING_SCREEN_SHARES_BUNDLE,
@@ -457,6 +460,24 @@ class FeatureTrialTests(unittest.TestCase):
             LIGHTWEIGHT_BASELINE_SOCIAL_SHARE_FEATURES,
         )
         self.assertEqual(created[-2:], (OTHER_SCREEN_SHARE, GAMING_SCREEN_SHARE))
+
+    def test_builds_trial_065_ablation_without_numeric_surprisal(self) -> None:
+        frame = example_frame()
+
+        created = add_candidate_features(
+            frame, TRIAL_065_WITHOUT_NUMERIC_SURPRISAL_BUNDLE
+        )
+
+        self.assertEqual(created, TRIAL_065_WITHOUT_NUMERIC_SURPRISAL_FEATURES)
+        self.assertEqual(created, TRIAL_066_BASELINE_FEATURES)
+        self.assertNotIn(NUMERIC_VALUE_MEAN_SURPRISAL, created)
+        self.assertEqual(
+            created[: len(SCREENING_WINNER_FEATURES)], SCREENING_WINNER_FEATURES
+        )
+        self.assertEqual(
+            created[-3:],
+            (SOCIAL_SCREEN_SHARE, OTHER_SCREEN_SHARE, GAMING_SCREEN_SHARE),
+        )
 
     def test_numeric_surprisal_rejects_missing_sources(self) -> None:
         with self.assertRaisesRegex(ValueError, "missing columns"):

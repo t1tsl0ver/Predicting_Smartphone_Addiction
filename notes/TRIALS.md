@@ -67,11 +67,12 @@
 | [`trial-063`](trials/trial-063-other-screen-share.md) | Доля прочего экранного времени поверх `trial-054` | **0.966425** LGBM blend OOF | **+0.000207** | accepted screening; won 5/5, interval positive |
 | [`trial-064`](trials/trial-064-gaming-screen-share.md) | Доля gaming в общем экранном времени поверх `trial-054` | **0.966440** LGBM blend OOF | **+0.000223** | accepted screening; won 5/5, interval positive |
 | [`trial-065`](trials/trial-065-combine-other-gaming-shares.md) | Совместно other- и gaming-доли поверх `trial-054` | **0.966646** LGBM blend OOF | **+0.000428** | accepted baseline; won 5/5, beats both singles 5/5 |
+| [`trial-066`](trials/trial-066-ablate-numeric-surprisal.md) | Удалён не изолированный ранее `numeric_value_mean_surprisal` из `trial-065` | **0.966654** LGBM blend OOF | +0.000009 | accepted simplification; 3/5, interval crosses zero |
 
-Следующий ID: `trial-066`. По решению участника активная лёгкая линия теперь
+Следующий ID: `trial-067`. По решению участника активная лёгкая линия теперь
 использует 5-fold CV при прежних 200 деревьях. LightGBM-контроль — exact/base
-rank blend 60/40 с seed `2026`; его актуальная принятая точка — `trial-065` с
-OOF `0.9666455685`. Исторические 2-fold trial и `src/trial_config.py` остаются
+rank blend 60/40 с seed `2026`; его актуальная принятая точка — `trial-066` с
+OOF `0.9666541546`. Исторические 2-fold trial и `src/trial_config.py` остаются
 для воспроизводимости прежней screening-серии.
 
 Новая серия одиночных feature-trial использует тот же cached LightGBM exact/base
@@ -92,7 +93,8 @@ feature-trial после отдельного обсуждения. `trial-049` 
 выиграл 2/2 folds, но затем участник выбрал другой групповой 5-fold кандидат.
 `trial-051` одновременно подтвердил четыре обычные screening-фичи и добавил
 mean surprisal точных числовых значений: пакет дал `+0.000674`, выиграл 5/5
-folds и стал текущим лёгким baseline. Отдельный вклад surprisal не установлен.
+folds и стал исходным лёгким baseline. Отдельный вклад surprisal тогда не был
+установлен.
 `trial-052` добавил вторые десятичные цифры уже поверх этого baseline. Base вырос
 на `+0.000536`, но blend — только на `+0.000033`; один fold отрицателен, interval
 пересекает ноль, поэтому каноническая точка не изменена.
@@ -108,4 +110,7 @@ marginal-сигнал среднего пяти экранных колонок 
 blend delta `-0.0000051`. `trial-063 other_screen_share` и `trial-064
 gaming_screen_share` независимо выиграли 5/5 с delta `+0.0002073` и
 `+0.0002231`. Их совместный `trial-065` дал `+0.0004282` до `0.9666455685`,
-выиграл 5/5 у контроля и 5/5 у каждого single. Это текущий лёгкий baseline.
+выиграл 5/5 у контроля и 5/5 у каждого single. `trial-066` затем удалил
+`numeric_value_mean_surprisal`: OOF практически не изменился (`+0.0000086`),
+folds разошлись 3/5, CI пересёк ноль. По правилу упрощения при равном качестве
+surprisal удалён; семифичевый `trial-066` — текущий лёгкий baseline.
