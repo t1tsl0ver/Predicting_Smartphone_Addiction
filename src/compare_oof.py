@@ -25,6 +25,17 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--prediction-column",
         default="lightgbm_probability",
+        help="Shared prediction column used when side-specific columns are omitted.",
+    )
+    parser.add_argument(
+        "--control-prediction-column",
+        default=None,
+        help="Prediction column in the control file.",
+    )
+    parser.add_argument(
+        "--candidate-prediction-column",
+        default=None,
+        help="Prediction column in the candidate file.",
     )
     parser.add_argument("--repeats", type=int, default=300)
     parser.add_argument("--sample-size", type=int, default=DEFAULT_TEST_SIZE)
@@ -37,10 +48,17 @@ def load_aligned_oof(
     control_path: Path,
     candidate_path: Path,
     prediction_column: str,
+    control_prediction_column: str | None = None,
+    candidate_prediction_column: str | None = None,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    required = ["row_index", "target", prediction_column]
-    control = pd.read_csv(control_path, usecols=required).sort_values("row_index")
-    candidate = pd.read_csv(candidate_path, usecols=required).sort_values("row_index")
+    control_prediction_column = control_prediction_column or prediction_column
+    candidate_prediction_column = candidate_prediction_column or prediction_column
+    control_required = ["row_index", "target", control_prediction_column]
+    candidate_required = ["row_index", "target", candidate_prediction_column]
+    control = pd.read_csv(control_path, usecols=control_required).sort_values("row_index")
+    candidate = pd.read_csv(candidate_path, usecols=candidate_required).sort_values(
+        "row_index"
+    )
 
     if control["row_index"].duplicated().any() or candidate["row_index"].duplicated().any():
         raise ValueError("OOF row_index values must be unique")
@@ -54,8 +72,10 @@ def load_aligned_oof(
         raise ValueError("Control and candidate targets differ")
 
     target = control["target"].to_numpy(dtype=np.int8)
-    control_prediction = control[prediction_column].to_numpy(dtype=np.float64)
-    candidate_prediction = candidate[prediction_column].to_numpy(dtype=np.float64)
+    control_prediction = control[control_prediction_column].to_numpy(dtype=np.float64)
+    candidate_prediction = candidate[candidate_prediction_column].to_numpy(
+        dtype=np.float64
+    )
     if set(np.unique(target)) != {0, 1}:
         raise ValueError("Target must contain exactly the binary values 0 and 1")
     if not np.isfinite(control_prediction).all() or not np.isfinite(
@@ -111,10 +131,18 @@ def paired_stratified_bootstrap_deltas(
 
 def main() -> None:
     args = parse_args()
+    control_prediction_column = (
+        args.control_prediction_column or args.prediction_column
+    )
+    candidate_prediction_column = (
+        args.candidate_prediction_column or args.prediction_column
+    )
     target, control_prediction, candidate_prediction = load_aligned_oof(
         args.control,
         args.candidate,
         args.prediction_column,
+        control_prediction_column,
+        candidate_prediction_column,
     )
     control_auc = roc_auc_score(target, control_prediction)
     candidate_auc = roc_auc_score(target, candidate_prediction)
@@ -129,7 +157,13 @@ def main() -> None:
     result = {
         "control": str(args.control),
         "candidate": str(args.candidate),
-        "prediction_column": args.prediction_column,
+        "prediction_column": (
+            control_prediction_column
+            if control_prediction_column == candidate_prediction_column
+            else None
+        ),
+        "control_prediction_column": control_prediction_column,
+        "candidate_prediction_column": candidate_prediction_column,
         "rows": len(target),
         "control_auc": control_auc,
         "candidate_auc": candidate_auc,

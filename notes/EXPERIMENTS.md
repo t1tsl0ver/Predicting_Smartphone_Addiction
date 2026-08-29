@@ -11,7 +11,9 @@
 | [`exp-006`](experiments/exp-006-full-exact-catboost.md) | Full 5-fold CatBoost, LR 0.01, 3000 деревьев, без `gaming_hours_exact` | **0.965896 OOF** | **0.96711** | completed; best standalone, rejected vs `exp-005` |
 | [`exp-007`](experiments/exp-007-full-target-encoded-lightgbm.md) | Full 5-fold exact/base LightGBM с 15 leak-safe TE | **0.966831 OOF** | not submitted | completed locally; retained for blend |
 | [`exp-008`](experiments/exp-008-exp005-exp007-rank-blend.md) | 50/50 rank blend `exp-005` + `exp-007` | **0.967339 OOF** | **0.96863** | completed; current leader |
+| [`exp-009`](experiments/exp-009-full-trial066-no-te-lightgbm.md) | Full 5-fold exact/base LightGBM с семью no-TE фичами `trial-066` | **0.967137 OOF** | not submitted | completed locally; best standalone no-TE |
 
 `exp-008` — текущий общий локальный и leaderboard-лидер. `exp-007` почти
 повторил старый рекорд самостоятельно и дал полезное разнообразие в бленде.
-Следующий итоговый ID — `exp-009`.
+`exp-009` устойчиво превысил `trial-066` и `exp-005`, но уступил `exp-008` на
+`0.000201`. Следующий итоговый ID — `exp-010`.

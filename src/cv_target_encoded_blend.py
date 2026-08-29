@@ -19,6 +19,7 @@ from cv_feature_trial import (
     FREQUENCY_CANDIDATES,
     SCREENING_WINNERS_ALL_TARGET_ENCODINGS_BUNDLE,
     TARGET_ENCODING_CANDIDATES,
+    TRIAL_065_WITHOUT_NUMERIC_SURPRISAL_BUNDLE,
     add_candidate_features,
     apply_target_encoding,
     fold_frequency_values,
@@ -30,11 +31,23 @@ from cv_lightgbm import ID_COLUMN, TARGET, percentile_rank, prepare_lightgbm
 from progress_logging import LightGBMProgressCallback, RunLogger, format_duration
 
 
+TARGET_ENCODED_BUNDLE_MODE = "trial-045-target-encoded"
+TRIAL_066_NO_TE_BUNDLE_MODE = "trial-066-no-te"
+FEATURE_BUNDLE_CANDIDATES = {
+    TARGET_ENCODED_BUNDLE_MODE: SCREENING_WINNERS_ALL_TARGET_ENCODINGS_BUNDLE,
+    TRIAL_066_NO_TE_BUNDLE_MODE: TRIAL_065_WITHOUT_NUMERIC_SURPRISAL_BUNDLE,
+}
+FEATURE_BUNDLE_SOURCES = {
+    TARGET_ENCODED_BUNDLE_MODE: "full trial-045 bundle",
+    TRIAL_066_NO_TE_BUNDLE_MODE: "accepted seven-feature trial-066 bundle",
+}
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
-            "Run a full exact/base LightGBM blend with the accepted feature "
-            "bundle and leak-safe target encodings."
+            "Run a full exact/base LightGBM blend with an accepted feature "
+            "bundle and optional leak-safe target encodings."
         )
     )
     parser.add_argument("--train", type=Path, default=Path("data/train.csv"))
@@ -52,6 +65,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--exact-weight", type=float, default=0.60)
     parser.add_argument("--target-encoding-alpha", type=float, default=50.0)
     parser.add_argument("--target-encoding-inner-folds", type=int, default=5)
+    parser.add_argument(
+        "--feature-bundle",
+        choices=sorted(FEATURE_BUNDLE_CANDIDATES),
+        default=TARGET_ENCODED_BUNDLE_MODE,
+        help="Select the historical TE bundle or the current no-TE baseline.",
+    )
     parser.add_argument("--log-every", type=int, default=100)
     parser.add_argument("--output-dir", type=Path, default=Path("artifacts"))
     parser.add_argument("--submission", type=Path, default=None)
@@ -94,18 +113,15 @@ def frequency_values_for_test(
 def build_feature_frames(
     train: pd.DataFrame,
     test: pd.DataFrame,
+    candidate_bundle: str = SCREENING_WINNERS_ALL_TARGET_ENCODINGS_BUNDLE,
 ) -> tuple[
     tuple[str, ...],
     list[str],
     list[str],
     dict[str, tuple[pd.DataFrame, pd.DataFrame, list[str], list[str]]],
 ]:
-    train_candidates = add_candidate_features(
-        train, SCREENING_WINNERS_ALL_TARGET_ENCODINGS_BUNDLE
-    )
-    test_candidates = add_candidate_features(
-        test, SCREENING_WINNERS_ALL_TARGET_ENCODINGS_BUNDLE
-    )
+    train_candidates = add_candidate_features(train, candidate_bundle)
+    test_candidates = add_candidate_features(test, candidate_bundle)
     if train_candidates != test_candidates:
         raise ValueError("Train and test candidate feature schemas differ")
 
@@ -190,7 +206,7 @@ def checkpoint_signature(
     exact_features: list[str],
     base_features: list[str],
 ) -> dict[str, object]:
-    return {
+    signature = {
         "run_id": args.run_id,
         "folds": args.folds,
         "seed": args.seed,
@@ -205,6 +221,9 @@ def checkpoint_signature(
         "exact_features": exact_features,
         "base_features": base_features,
     }
+    if args.feature_bundle != TARGET_ENCODED_BUNDLE_MODE:
+        signature["feature_bundle"] = args.feature_bundle
+    return signature
 
 
 def prepare_checkpoint_directory(
@@ -235,7 +254,12 @@ def main() -> None:
     args = parse_args()
     validate_args(args)
     args.output_dir.mkdir(parents=True, exist_ok=True)
-    logger = RunLogger("cv-target-encoded-blend", args.output_dir / "logs", args.run_id)
+    process_name = (
+        "cv-target-encoded-blend"
+        if args.feature_bundle == TARGET_ENCODED_BUNDLE_MODE
+        else "cv-full-feature-blend"
+    )
+    logger = RunLogger(process_name, args.output_dir / "logs", args.run_id)
 
     with logger.step("Load and validate train, test and sample submission"):
         train = pd.read_csv(args.train)
@@ -248,26 +272,36 @@ def main() -> None:
         if not test[ID_COLUMN].equals(sample[ID_COLUMN]):
             raise ValueError("Test and sample submission ids differ")
 
-    with logger.step("Build full trial-045 feature bundle"):
+    candidate_bundle = FEATURE_BUNDLE_CANDIDATES[args.feature_bundle]
+    feature_source = FEATURE_BUNDLE_SOURCES[args.feature_bundle]
+    with logger.step(f"Build {feature_source}"):
         candidate_features, exact_features, base_features, variants = (
-            build_feature_frames(train, test)
+            build_feature_frames(train, test, candidate_bundle)
         )
         target = train[TARGET]
+    active_target_encodings = tuple(
+        feature for feature in candidate_features if feature in TARGET_ENCODING_CANDIDATES
+    )
 
     signature = checkpoint_signature(
         args, len(train), len(test), exact_features, base_features
     )
     checkpoint_dir = prepare_checkpoint_directory(args.output_dir, signature)
+    target_encoding_label = "disabled"
+    if active_target_encodings:
+        target_encoding_label = (
+            f"inner-{args.target_encoding_inner_folds}-fold "
+            f"alpha={args.target_encoding_alpha:g}"
+        )
     logger.info(
         f"Configuration | folds={args.folds}, trees<={args.iterations}, "
         f"learning_rate={args.learning_rate}, early_stopping={args.early_stopping_rounds}, "
         f"blend={args.exact_weight:.0%}/{1 - args.exact_weight:.0%}, "
-        f"target_encoding=inner-{args.target_encoding_inner_folds}-fold alpha="
-        f"{args.target_encoding_alpha:g}"
+        f"target_encoding={target_encoding_label}"
     )
     logger.info(
         f"Features | exact={len(exact_features)}, base={len(base_features)}, "
-        f"target_encoded={len(TARGET_ENCODING_CANDIDATES)}"
+        f"target_encoded={len(active_target_encodings)}"
     )
 
     row_count = len(train)
@@ -471,10 +505,21 @@ def main() -> None:
     test_blend = test_blend_sum / args.folds
     elapsed_seconds = time.perf_counter() - total_started
 
+    target_encoding_scope = None
+    if active_target_encodings:
+        target_encoding_scope = (
+            "outer-train mapping for validation/test; inner-OOF mapping "
+            "for model-train rows"
+        )
     metrics = {
         "run_id": args.run_id,
-        "model": "lightgbm_exact_base_target_encoded_blend",
-        "feature_source": "full trial-045 bundle",
+        "model": (
+            "lightgbm_exact_base_target_encoded_blend"
+            if active_target_encodings
+            else "lightgbm_exact_base_full_feature_blend"
+        ),
+        "feature_bundle": args.feature_bundle,
+        "feature_source": feature_source,
         "folds": args.folds,
         "seed": args.seed,
         "parameters": {
@@ -485,12 +530,13 @@ def main() -> None:
             "early_stopping_rounds": args.early_stopping_rounds,
             "exact_weight": args.exact_weight,
             "base_weight": 1 - args.exact_weight,
-            "target_encoding_alpha": args.target_encoding_alpha,
-            "target_encoding_inner_folds": args.target_encoding_inner_folds,
-            "target_encoding_scope": (
-                "outer-train mapping for validation/test; inner-OOF mapping "
-                "for model-train rows"
+            "target_encoding_alpha": (
+                args.target_encoding_alpha if active_target_encodings else None
             ),
+            "target_encoding_inner_folds": (
+                args.target_encoding_inner_folds if active_target_encodings else None
+            ),
+            "target_encoding_scope": target_encoding_scope,
             "frequency_encoding_scope": (
                 "outer-train mapping; unseen validation/test values map to zero"
             ),
@@ -503,7 +549,10 @@ def main() -> None:
         "elapsed_seconds": elapsed_seconds,
     }
 
-    metrics_path = args.output_dir / f"metrics_{args.run_id}_target_encoded_blend.json"
+    metrics_suffix = (
+        "target_encoded_blend" if active_target_encodings else "full_feature_blend"
+    )
+    metrics_path = args.output_dir / f"metrics_{args.run_id}_{metrics_suffix}.json"
     oof_path = args.output_dir / f"oof_predictions_{args.run_id}.csv"
     test_path = args.output_dir / f"test_predictions_{args.run_id}.csv"
     importance_path = args.output_dir / f"feature_importance_{args.run_id}.csv"

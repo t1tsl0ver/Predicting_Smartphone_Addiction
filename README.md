@@ -7,7 +7,8 @@
 ## Текущий результат
 
 Новый локальный итоговый эксперимент —
-[`exp-008`](notes/experiments/exp-008-exp005-exp007-rank-blend.md):
+[`exp-009`](notes/experiments/exp-009-full-trial066-no-te-lightgbm.md). Общим
+локальным и leaderboard-лидером остаётся `exp-008`:
 
 | Версия | Локальная проверка | Kaggle leaderboard |
 |---|---:|---:|
@@ -20,6 +21,7 @@
 | `exp-006`: full 5-fold CatBoost | **OOF 0.965896** | **0.96711** |
 | `exp-007`: full 15-TE LightGBM blend | **OOF 0.966831** | not submitted |
 | `exp-008`: 50/50 rank blend `exp-005` + `exp-007` | **OOF 0.967339** | **0.96863** |
+| `exp-009`: full no-TE LightGBM с фичами `trial-066` | **OOF 0.967137** | not submitted |
 
 `exp-003` использует принятые feature-engineering улучшения и categorical-копии
 точных числовых значений. Меньший learning rate и fold early stopping дали
@@ -208,6 +210,14 @@ CI95 `[-0.0000301; +0.0000487]` пересёк ноль. Улучшение ка
 но по заранее согласованному правилу при равенстве выбран более простой
 семифичевый пакет. До `exp-005` осталось `0.000220` OOF.
 
+`exp-009` перенёс этот семифичевый no-TE пакет в полный 5-fold режим: до 3000
+деревьев, LR `0.01`, early stopping и exact/base rank blend 60/40. OOF вырос до
+**`0.967137`**: `+0.000483` к лёгкому `trial-066` и `+0.000263` к `exp-005`,
+оба сравнения выиграны на 5/5 folds и имеют полностью положительные bootstrap-
+интервалы. Это лучший автономный no-TE кандидат, но он уступает общему ансамблю
+`exp-008` на `0.000201`. Submission не создавался; сохранённые OOF/test
+predictions готовы для отдельно согласуемой post-hoc blend-проверки.
+
 ## Структура репозитория
 
 ```text
@@ -222,10 +232,10 @@ src/cv_family_blends.py  2-fold exact/base blends CatBoost и LightGBM
 src/cv_drop_exact_feature.py парная ablation exact-фичи против cached OOF
 src/cv_feature_trial.py  LightGBM feature/bundle trial против cached blend
 src/cv_lightweight_control.py воспроизводимый 5-fold LightGBM/200 контроль
-src/cv_target_encoded_blend.py полный 5-fold exact/base blend с leak-safe TE
+src/cv_target_encoded_blend.py полный 5-fold exact/base blend с optional TE
 src/trial_config.py      параметры исторической быстрой 2-fold серии
 src/blend_cv.py          проверенный OOF/test rank blend и submission
-src/compare_oof.py       paired bootstrap для сравнения двух OOF-наборов
+src/compare_oof.py       paired bootstrap OOF, включая разные имена колонок
 src/progress_logging.py  общие консольные и файловые логи прогресса
 tests/                   быстрые проверки инфраструктурного кода
 artifacts/               локальные модели и метрики, игнорируются Git
