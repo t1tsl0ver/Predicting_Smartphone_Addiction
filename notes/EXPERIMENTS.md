@@ -12,8 +12,8 @@
 | [`exp-007`](experiments/exp-007-full-target-encoded-lightgbm.md) | Full 5-fold exact/base LightGBM с 15 leak-safe TE | **0.966831 OOF** | not submitted | completed locally; retained for blend |
 | [`exp-008`](experiments/exp-008-exp005-exp007-rank-blend.md) | 50/50 rank blend `exp-005` + `exp-007` | **0.967339 OOF** | **0.96863** | completed; current leader |
 | [`exp-009`](experiments/exp-009-full-trial066-no-te-lightgbm.md) | Full 5-fold exact/base LightGBM с семью no-TE фичами `trial-066` | **0.967137 OOF** | not submitted | completed locally; best standalone no-TE |
+| [`exp-010`](experiments/exp-010-exp009-exp007-rank-blend.md) | 55/45 rank blend `exp-009` + `exp-007` | **0.967528 OOF** | **0.96874** | completed; current leader |
 
-`exp-008` — текущий общий локальный и leaderboard-лидер. `exp-007` почти
-повторил старый рекорд самостоятельно и дал полезное разнообразие в бленде.
-`exp-009` устойчиво превысил `trial-066` и `exp-005`, но уступил `exp-008` на
-`0.000201`. Следующий итоговый ID — `exp-010`.
+`exp-010` — текущий локальный и leaderboard-лидер. Kaggle score `0.96874`
+подтвердил направление и улучшил `exp-008` на `0.00011`. Следующий итоговый
+ID — `exp-011`.
